@@ -1,0 +1,10 @@
+{
+  "name": "conway-life-game",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A dependency-free local Conway's Game of Life.",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check scripts/life-engine.js && node --check scripts/presets.js && node --check scripts/renderer.js && node --check scripts/app.js"
+  }
+}

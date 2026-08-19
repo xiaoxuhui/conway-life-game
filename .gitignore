@@ -1,0 +1,22 @@
+# Operating systems
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs and temporary files
+*.log
+.cache/
+tmp/
+temp/
+
+# Test and coverage output
+coverage/
+
+# Dependencies (reserved for future tooling; MVP should not require them)
+node_modules/

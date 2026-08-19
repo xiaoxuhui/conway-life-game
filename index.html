@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#101816">
+  <title>康威生命游戏</title>
+  <meta name="description" content="一个无需联网、可以在本地直接运行的康威生命游戏。">
+  <link rel="stylesheet" href="styles/main.css?v=0.1.0">
+  <script defer src="scripts/life-engine.js?v=0.1.0"></script>
+  <script defer src="scripts/presets.js?v=0.1.0"></script>
+  <script defer src="scripts/renderer.js?v=0.1.0"></script>
+  <script defer src="scripts/app.js?v=0.1.0"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">CELLULAR AUTOMATON · B3/S23</p>
+        <h1>康威生命游戏</h1>
+        <p class="subtitle">画下最初的生命，观察简单规则如何长出复杂世界。</p>
+      </div>
+
+      <div class="readouts" aria-label="模拟状态">
+        <div class="readout status-readout">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="statusText">已暂停</span>
+        </div>
+        <div class="readout">
+          <span class="readout-label">代数</span>
+          <strong id="generationValue">0</strong>
+        </div>
+        <div class="readout">
+          <span class="readout-label">生命</span>
+          <strong id="aliveValue">0</strong>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="control-panel" aria-label="模拟控制">
+        <div class="control-group primary-controls">
+          <button class="button button-primary" id="runToggle" type="button" aria-pressed="false" aria-keyshortcuts="Space">
+            <span class="button-icon" aria-hidden="true">▶</span>
+            <span class="button-label">开始</span>
+          </button>
+          <button class="button" id="stepButton" type="button" aria-keyshortcuts="ArrowRight">
+            <span aria-hidden="true">↦</span>
+            单步
+          </button>
+          <button class="button" id="clearButton" type="button" aria-keyshortcuts="C" disabled>
+            <span aria-hidden="true">◇</span>
+            清空
+          </button>
+          <button class="button" id="randomButton" type="button">
+            <span aria-hidden="true">✦</span>
+            随机
+          </button>
+        </div>
+
+        <div class="control-group speed-control">
+          <div class="control-heading">
+            <label for="speedRange">演化速度</label>
+            <output id="speedValue" for="speedRange">5 代/秒</output>
+          </div>
+          <input id="speedRange" type="range" min="1" max="20" value="5" step="1">
+        </div>
+
+        <div class="control-group pattern-controls">
+          <label class="select-label" for="presetSelect">经典图案</label>
+          <div class="select-row">
+            <select id="presetSelect" aria-describedby="presetDescription"></select>
+            <button class="button" id="loadPresetButton" type="button">放置</button>
+          </div>
+          <p id="presetDescription" class="field-note"></p>
+        </div>
+
+        <div class="control-group file-controls" aria-label="保存与读取">
+          <button class="button" id="importButton" type="button">导入</button>
+          <input id="importInput" type="file" accept="application/json,.json" hidden>
+          <button class="button" id="exportButton" type="button" disabled>导出</button>
+        </div>
+      </section>
+
+      <section class="board-section" aria-labelledby="boardTitle">
+        <div class="board-heading">
+          <div>
+            <p class="section-kicker">WORLD 60 × 40</p>
+            <h2 id="boardTitle">生命观测区</h2>
+          </div>
+          <p id="boardHint">点击或拖动绘制；从活细胞开始拖动可擦除。</p>
+        </div>
+
+        <div class="board-frame" id="boardFrame">
+          <canvas
+            id="lifeCanvas"
+            tabindex="0"
+            role="img"
+            aria-keyshortcuts="Space ArrowRight C"
+            aria-label="60 列、40 行的康威生命游戏棋盘；当前为空。"
+          ></canvas>
+          <div class="scan-line" aria-hidden="true"></div>
+        </div>
+      </section>
+
+      <section class="rules-card" aria-labelledby="rulesTitle">
+        <div>
+          <p class="section-kicker">RULESET</p>
+          <h2 id="rulesTitle">四条规则，一个宇宙</h2>
+        </div>
+        <div class="rule-grid">
+          <div class="rule"><strong>&lt; 2</strong><span>孤独，死亡</span></div>
+          <div class="rule"><strong>2–3</strong><span>活细胞存活</span></div>
+          <div class="rule"><strong>&gt; 3</strong><span>拥挤，死亡</span></div>
+          <div class="rule accent-rule"><strong>= 3</strong><span>死细胞诞生</span></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p><kbd>空格</kbd> 开始/暂停 · <kbd>→</kbd> 单步 · <kbd>C</kbd> 清空</p>
+      <p>所有计算只在你的浏览器中完成。</p>
+    </footer>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <span id="toastMessage"></span>
+    <button id="undoButton" type="button" hidden>撤销</button>
+  </div>
+
+  <noscript>此游戏需要启用 JavaScript 才能运行。</noscript>
+</body>
+</html>
