@@ -93,43 +93,53 @@
   };
 
   const renderer = RendererModule.create(elements.canvas);
+  // 状态按职责分为 world（演化/视图）/ pointer（指针与手势）/ dialogs（对话框与瞬时 UI 模式）/ storage（持久化库）四个子对象，
+  // 便于维护；所有访问点已同步改为 state.<group>.<field>，行为与原扁平结构完全一致。
   const state = {
-    world: Life.createWorld(),
-    generation: 0,
-    running: false,
-    speed: SpeedControl.DEFAULT_SPEED,
-    animationFrame: null,
-    frameAccumulator: 0,
-    lastFrameTimestamp: null,
-    actualSpeed: 0,
-    speedWindowStarted: null,
-    speedWindowGenerations: 0,
-    camera: RendererModule.createCamera(),
-    drawingPointerId: null,
-    drawAlive: true,
-    painted: new Set(),
-    strokeOriginal: new Map(),
-    panGesture: null,
-    touchGesture: null,
-    activePointers: new Map(),
-    spaceDown: false,
-    spaceDragged: false,
-    undoSnapshot: null,
-    toastTimer: null,
-    patternLibrary: PatternStore.createLibrary(),
-    logicFunctionLibrary: FunctionStore.createLibrary(),
-    logicFunctionDraft: null,
-    logicGenerationController: null,
-    logicFunctionStorageBlocked: false,
-    functionDeleteArmed: false,
-    functionDeleteArmTimer: null,
-    saveDraftWorld: null,
-    duplicatePatternId: null,
-    deleteArmed: false,
-    deleteArmTimer: null,
-    patternStorageBlocked: false,
-    placement: null,
-    logicOutputs: [],
+    world: {
+      cells: Life.createWorld(),
+      generation: 0,
+      running: false,
+      speed: SpeedControl.DEFAULT_SPEED,
+      animationFrame: null,
+      frameAccumulator: 0,
+      lastFrameTimestamp: null,
+      actualSpeed: 0,
+      speedWindowStarted: null,
+      speedWindowGenerations: 0,
+      camera: RendererModule.createCamera(),
+      undoSnapshot: null,
+      logicOutputs: [],
+    },
+    pointer: {
+      drawingPointerId: null,
+      drawAlive: true,
+      painted: new Set(),
+      strokeOriginal: new Map(),
+      panGesture: null,
+      touchGesture: null,
+      activePointers: new Map(),
+      spaceDown: false,
+      spaceDragged: false,
+      saveDraftWorld: null,
+    },
+    dialogs: {
+      toastTimer: null,
+      logicFunctionDraft: null,
+      logicGenerationController: null,
+      functionDeleteArmed: false,
+      functionDeleteArmTimer: null,
+      duplicatePatternId: null,
+      deleteArmed: false,
+      deleteArmTimer: null,
+      placement: null,
+    },
+    storage: {
+      patternLibrary: PatternStore.createLibrary(),
+      logicFunctionLibrary: FunctionStore.createLibrary(),
+      logicFunctionStorageBlocked: false,
+      patternStorageBlocked: false,
+    },
   };
 
   function formatNumber(value) {
@@ -151,8 +161,8 @@
   }
 
   function updateCursorClasses() {
-    document.body.classList.toggle("pan-ready", state.spaceDown);
-    document.body.classList.toggle("is-panning", Boolean(state.panGesture || state.touchGesture));
+    document.body.classList.toggle("pan-ready", state.pointer.spaceDown);
+    document.body.classList.toggle("is-panning", Boolean(state.pointer.panGesture || state.pointer.touchGesture));
   }
 
   function absoluteLogicCells(output, key) {
@@ -160,7 +170,7 @@
   }
 
   function logicAnnotations() {
-    return state.logicOutputs.map((output) => ({
+    return state.world.logicOutputs.map((output) => ({
       observeGeneration: output.observeGeneration,
       result: output.result,
       terminalCells: absoluteLogicCells(output, "terminalCells"),
@@ -168,76 +178,76 @@
   }
 
   function updateLogicOutputs() {
-    for (const output of state.logicOutputs) {
-      if (output.result !== null || state.generation < output.observeGeneration) continue;
+    for (const output of state.world.logicOutputs) {
+      if (output.result !== null || state.world.generation < output.observeGeneration) continue;
       output.result = Number(absoluteLogicCells(output, "signalCells")
-        .every(([row, column]) => Life.isAlive(state.world, row, column)));
+        .every(([row, column]) => Life.isAlive(state.world.cells, row, column)));
     }
   }
 
   function logicOutputSummary() {
-    if (state.logicOutputs.length === 0) return "";
-    return state.logicOutputs
+    if (state.world.logicOutputs.length === 0) return "";
+    return state.world.logicOutputs
       .map((output) => output.result === null ? `O=?（第 ${output.observeGeneration} 代读取）` : `O=${output.result}`)
       .join("；");
   }
 
   function render() {
-    const alive = Life.countAlive(state.world);
-    renderer.draw(state.world, state.camera, state.running, state.placement, logicAnnotations());
-    elements.generation.textContent = formatNumber(state.generation);
+    const alive = Life.countAlive(state.world.cells);
+    renderer.draw(state.world.cells, state.world.camera, state.world.running, state.dialogs.placement, logicAnnotations());
+    elements.generation.textContent = formatNumber(state.world.generation);
     elements.alive.textContent = formatNumber(alive);
-    elements.actualSpeed.textContent = `${formatNumber(state.actualSpeed)}/s`;
-    elements.zoomValue.textContent = formatZoom(state.camera.cellSize);
-    elements.status.textContent = state.placement ? "放置中" : state.running ? "演化中" : "已暂停";
-    elements.run.querySelector(".button-icon").textContent = state.running ? "Ⅱ" : "▶";
-    elements.run.querySelector(".button-label").textContent = state.running ? "暂停" : "开始";
-    elements.run.setAttribute("aria-pressed", String(state.running));
-    elements.step.disabled = state.running;
+    elements.actualSpeed.textContent = `${formatNumber(state.world.actualSpeed)}/s`;
+    elements.zoomValue.textContent = formatZoom(state.world.camera.cellSize);
+    elements.status.textContent = state.dialogs.placement ? "放置中" : state.world.running ? "演化中" : "已暂停";
+    elements.run.querySelector(".button-icon").textContent = state.world.running ? "Ⅱ" : "▶";
+    elements.run.querySelector(".button-label").textContent = state.world.running ? "暂停" : "开始";
+    elements.run.setAttribute("aria-pressed", String(state.world.running));
+    elements.step.disabled = state.world.running;
     elements.clear.disabled = alive === 0;
     elements.export.disabled = alive === 0;
     elements.savePattern.disabled = alive === 0;
-    elements.managePatterns.disabled = state.patternLibrary.patterns.length === 0;
-    elements.loadPreset.textContent = state.placement ? "完成" : "放置";
-    elements.loadPreset.setAttribute("aria-pressed", String(Boolean(state.placement)));
-    elements.rotatePattern.disabled = !state.placement;
-    elements.flipPattern.disabled = !state.placement;
+    elements.managePatterns.disabled = state.storage.patternLibrary.patterns.length === 0;
+    elements.loadPreset.textContent = state.dialogs.placement ? "完成" : "放置";
+    elements.loadPreset.setAttribute("aria-pressed", String(Boolean(state.dialogs.placement)));
+    elements.rotatePattern.disabled = !state.dialogs.placement;
+    elements.flipPattern.disabled = !state.dialogs.placement;
     elements.canvas.setAttribute(
       "aria-label",
-      `无限大的康威生命游戏世界；视图中心列 ${formatCoordinate(state.camera.centerColumn)}、行 ${formatCoordinate(state.camera.centerRow)}；第 ${state.generation} 代，${alive} 个活细胞，${state.placement ? `正在放置${state.placement.pattern.name}` : state.running ? "正在运行" : "已暂停"}${state.logicOutputs.length ? `；逻辑输出：${logicOutputSummary()}` : ""}。`,
+      `无限大的康威生命游戏世界；视图中心列 ${formatCoordinate(state.world.camera.centerColumn)}、行 ${formatCoordinate(state.world.camera.centerRow)}；第 ${state.world.generation} 代，${alive} 个活细胞，${state.dialogs.placement ? `正在放置${state.dialogs.placement.pattern.name}` : state.world.running ? "正在运行" : "已暂停"}${state.world.logicOutputs.length ? `；逻辑输出：${logicOutputSummary()}` : ""}。`,
     );
-    elements.boardHint.textContent = state.placement
+    elements.boardHint.textContent = state.dialogs.placement
       ? "拖动预览，松开或单击放置；R 旋转 · F 翻转 · Esc 完成。"
-      : state.logicOutputs.length
+      : state.world.logicOutputs.length
         ? `方框中的 2×2 方块是静物输出端；${logicOutputSummary()}。`
-      : state.running
+      : state.world.running
         ? "正在演化；仍可拖动和缩放，暂停后可继续绘制。"
         : "左键绘制；中键、右键或按住空格拖动；滚轮缩放。";
-    elements.worldPosition.textContent = `WORLD ∞ · CENTER ${formatCoordinate(state.camera.centerColumn)}, ${formatCoordinate(state.camera.centerRow)}`;
-    document.body.classList.toggle("is-running", state.running);
-    document.body.classList.toggle("is-placing", Boolean(state.placement));
+    elements.worldPosition.textContent = `WORLD ∞ · CENTER ${formatCoordinate(state.world.camera.centerColumn)}, ${formatCoordinate(state.world.camera.centerRow)}`;
+    document.body.classList.toggle("is-running", state.world.running);
+    document.body.classList.toggle("is-placing", Boolean(state.dialogs.placement));
     updateCursorClasses();
   }
 
   function hideToast() {
     elements.toast.hidden = true;
     elements.undo.hidden = true;
-    window.clearTimeout(state.toastTimer);
-    state.toastTimer = null;
+    window.clearTimeout(state.dialogs.toastTimer);
+    state.dialogs.toastTimer = null;
   }
 
   function showToast(message, options = {}) {
-    window.clearTimeout(state.toastTimer);
+    window.clearTimeout(state.dialogs.toastTimer);
     elements.toastMessage.textContent = message;
     elements.undo.hidden = !options.undo;
     elements.toast.hidden = false;
-    state.toastTimer = window.setTimeout(hideToast, options.duration || 3600);
+    state.dialogs.toastTimer = window.setTimeout(hideToast, options.duration || 3600);
   }
 
   function evolveOneGeneration() {
-    if (state.placement) state.placement = null;
-    state.world = Life.nextGeneration(state.world);
-    state.generation += 1;
+    if (state.dialogs.placement) state.dialogs.placement = null;
+    state.world.cells = Life.nextGeneration(state.world.cells);
+    state.world.generation += 1;
     updateLogicOutputs();
   }
 
@@ -247,135 +257,135 @@
   }
 
   function runAnimationFrame(timestamp) {
-    if (!state.running) return;
+    if (!state.world.running) return;
     let shouldRender = false;
-    if (state.lastFrameTimestamp === null) {
-      state.lastFrameTimestamp = timestamp;
-      state.speedWindowStarted = timestamp;
+    if (state.world.lastFrameTimestamp === null) {
+      state.world.lastFrameTimestamp = timestamp;
+      state.world.speedWindowStarted = timestamp;
     } else {
-      state.frameAccumulator = SpeedControl.accumulate(
-        state.frameAccumulator,
-        timestamp - state.lastFrameTimestamp,
-        state.speed,
+      state.world.frameAccumulator = SpeedControl.accumulate(
+        state.world.frameAccumulator,
+        timestamp - state.world.lastFrameTimestamp,
+        state.world.speed,
       );
-      state.lastFrameTimestamp = timestamp;
+      state.world.lastFrameTimestamp = timestamp;
       const computeStarted = performance.now();
-      while (state.frameAccumulator >= 1) {
+      while (state.world.frameAccumulator >= 1) {
         evolveOneGeneration();
-        state.frameAccumulator -= 1;
-        state.speedWindowGenerations += 1;
+        state.world.frameAccumulator -= 1;
+        state.world.speedWindowGenerations += 1;
         shouldRender = true;
         if (performance.now() - computeStarted >= SpeedControl.FRAME_COMPUTE_BUDGET_MS) break;
       }
     }
 
-    const windowElapsed = timestamp - state.speedWindowStarted;
+    const windowElapsed = timestamp - state.world.speedWindowStarted;
     if (windowElapsed >= SpeedControl.ACTUAL_SPEED_WINDOW_MS) {
-      state.actualSpeed = Math.round(state.speedWindowGenerations * 1000 / windowElapsed);
-      state.speedWindowStarted = timestamp;
-      state.speedWindowGenerations = 0;
+      state.world.actualSpeed = Math.round(state.world.speedWindowGenerations * 1000 / windowElapsed);
+      state.world.speedWindowStarted = timestamp;
+      state.world.speedWindowGenerations = 0;
       shouldRender = true;
     }
     if (shouldRender) render();
-    state.animationFrame = window.requestAnimationFrame(runAnimationFrame);
+    state.world.animationFrame = window.requestAnimationFrame(runAnimationFrame);
   }
 
   function stop(options = {}) {
-    if (state.animationFrame !== null) {
-      window.cancelAnimationFrame(state.animationFrame);
-      state.animationFrame = null;
+    if (state.world.animationFrame !== null) {
+      window.cancelAnimationFrame(state.world.animationFrame);
+      state.world.animationFrame = null;
     }
-    const changed = state.running;
-    state.running = false;
-    state.frameAccumulator = 0;
-    state.lastFrameTimestamp = null;
-    state.speedWindowStarted = null;
-    state.speedWindowGenerations = 0;
-    state.actualSpeed = 0;
+    const changed = state.world.running;
+    state.world.running = false;
+    state.world.frameAccumulator = 0;
+    state.world.lastFrameTimestamp = null;
+    state.world.speedWindowStarted = null;
+    state.world.speedWindowGenerations = 0;
+    state.world.actualSpeed = 0;
     if (changed && options.message) showToast(options.message);
     render();
   }
 
   function start() {
-    if (state.running) return;
-    state.placement = null;
-    state.running = true;
-    state.frameAccumulator = 0;
-    state.lastFrameTimestamp = null;
-    state.speedWindowStarted = null;
-    state.speedWindowGenerations = 0;
-    state.actualSpeed = 0;
-    state.animationFrame = window.requestAnimationFrame(runAnimationFrame);
+    if (state.world.running) return;
+    state.dialogs.placement = null;
+    state.world.running = true;
+    state.world.frameAccumulator = 0;
+    state.world.lastFrameTimestamp = null;
+    state.world.speedWindowStarted = null;
+    state.world.speedWindowGenerations = 0;
+    state.world.actualSpeed = 0;
+    state.world.animationFrame = window.requestAnimationFrame(runAnimationFrame);
     render();
   }
 
   function resetAnimationPacing() {
-    if (!state.running) return;
-    state.frameAccumulator = 0;
-    state.lastFrameTimestamp = null;
-    state.speedWindowStarted = null;
-    state.speedWindowGenerations = 0;
-    state.actualSpeed = 0;
+    if (!state.world.running) return;
+    state.world.frameAccumulator = 0;
+    state.world.lastFrameTimestamp = null;
+    state.world.speedWindowStarted = null;
+    state.world.speedWindowGenerations = 0;
+    state.world.actualSpeed = 0;
     render();
   }
 
   function toggleRun() {
-    if (state.running) stop();
+    if (state.world.running) stop();
     else start();
   }
 
   function fitView() {
-    state.camera = renderer.fit(Life.bounds(state.world));
+    state.world.camera = renderer.fit(Life.bounds(state.world.cells));
     render();
   }
 
   function resetWith(world, message, shouldFit = true) {
     stop();
-    state.placement = null;
-    state.world = world;
-    state.generation = 0;
-    state.logicOutputs = [];
-    state.undoSnapshot = null;
-    if (shouldFit) state.camera = renderer.fit(Life.bounds(world));
+    state.dialogs.placement = null;
+    state.world.cells = world;
+    state.world.generation = 0;
+    state.world.logicOutputs = [];
+    state.world.undoSnapshot = null;
+    if (shouldFit) state.world.camera = renderer.fit(Life.bounds(world));
     render();
     if (message) showToast(message);
   }
 
   function clearWorld() {
-    if (Life.countAlive(state.world) === 0) return;
-    const wasRunning = state.running;
+    if (Life.countAlive(state.world.cells) === 0) return;
+    const wasRunning = state.world.running;
     stop();
-    state.placement = null;
-    state.undoSnapshot = {
-      world: Life.cloneWorld(state.world),
-      generation: state.generation,
-      camera: RendererModule.createCamera(state.camera),
+    state.dialogs.placement = null;
+    state.world.undoSnapshot = {
+      world: Life.cloneWorld(state.world.cells),
+      generation: state.world.generation,
+      camera: RendererModule.createCamera(state.world.camera),
       wasRunning,
-      logicOutputs: state.logicOutputs.map((output) => ({ ...output })),
+      logicOutputs: state.world.logicOutputs.map((output) => ({ ...output })),
     };
-    state.world = Life.createWorld();
-    state.generation = 0;
-    state.logicOutputs = [];
+    state.world.cells = Life.createWorld();
+    state.world.generation = 0;
+    state.world.logicOutputs = [];
     render();
     showToast("世界已清空", { undo: true, duration: 7000 });
   }
 
   function undoClear() {
-    if (!state.undoSnapshot) return;
-    const snapshot = state.undoSnapshot;
-    state.undoSnapshot = null;
-    state.world = snapshot.world;
-    state.generation = snapshot.generation;
-    state.camera = snapshot.camera;
-    state.logicOutputs = snapshot.logicOutputs || [];
+    if (!state.world.undoSnapshot) return;
+    const snapshot = state.world.undoSnapshot;
+    state.world.undoSnapshot = null;
+    state.world.cells = snapshot.world;
+    state.world.generation = snapshot.generation;
+    state.world.camera = snapshot.camera;
+    state.world.logicOutputs = snapshot.logicOutputs || [];
     hideToast();
     render();
     showToast("已恢复清空前的世界");
   }
 
   function fillRandom() {
-    const centerRow = Math.floor(state.camera.centerRow);
-    const centerColumn = Math.floor(state.camera.centerColumn);
+    const centerRow = Math.floor(state.world.camera.centerRow);
+    const centerColumn = Math.floor(state.world.camera.centerColumn);
     resetWith(
       Life.randomWorld(RANDOM_ROWS, RANDOM_COLUMNS, RANDOM_DENSITY, Math.random, centerRow, centerColumn),
       "已在视图中心生成 25% 密度的随机世界",
@@ -394,10 +404,10 @@
     }
     elements.presetSelect.append(builtInGroup);
 
-    if (state.patternLibrary.patterns.length > 0) {
+    if (state.storage.patternLibrary.patterns.length > 0) {
       const customGroup = document.createElement("optgroup");
       customGroup.label = "我的图案";
-      for (const pattern of state.patternLibrary.patterns) {
+      for (const pattern of state.storage.patternLibrary.patterns) {
         const option = document.createElement("option");
         option.value = `custom:${pattern.id}`;
         option.textContent = pattern.name;
@@ -415,7 +425,7 @@
     const [source, id] = elements.presetSelect.value.split(":");
     if (source === "builtin") return { source, pattern: Presets.getPreset(id) };
     if (source === "custom") {
-      return { source, pattern: state.patternLibrary.patterns.find((item) => item.id === id) || null };
+      return { source, pattern: state.storage.patternLibrary.patterns.find((item) => item.id === id) || null };
     }
     return { source: null, pattern: null };
   }
@@ -430,23 +440,23 @@
     elements.presetDescription.textContent = source === "custom"
       ? `${pattern.description || "我的自定义图案"} · ${details}`
       : `${pattern.description} · ${details}`;
-    if (state.placement) replacePlacementPattern(pattern);
+    if (state.dialogs.placement) replacePlacementPattern(pattern);
   }
 
   function placementAtCameraCenter(pattern) {
     return {
       pattern,
-      row: Math.floor(state.camera.centerRow) - Math.floor(pattern.height / 2),
-      column: Math.floor(state.camera.centerColumn) - Math.floor(pattern.width / 2),
+      row: Math.floor(state.world.camera.centerRow) - Math.floor(pattern.height / 2),
+      column: Math.floor(state.world.camera.centerColumn) - Math.floor(pattern.width / 2),
       pointerId: null,
     };
   }
 
   function replacePlacementPattern(pattern) {
-    if (!state.placement || !pattern) return;
-    const centerRow = state.placement.row + (state.placement.pattern.height - 1) / 2;
-    const centerColumn = state.placement.column + (state.placement.pattern.width - 1) / 2;
-    state.placement = {
+    if (!state.dialogs.placement || !pattern) return;
+    const centerRow = state.dialogs.placement.row + (state.dialogs.placement.pattern.height - 1) / 2;
+    const centerColumn = state.dialogs.placement.column + (state.dialogs.placement.pattern.width - 1) / 2;
+    state.dialogs.placement = {
       pattern,
       row: Math.round(centerRow - (pattern.height - 1) / 2),
       column: Math.round(centerColumn - (pattern.width - 1) / 2),
@@ -456,8 +466,8 @@
   }
 
   function finishPlacement(message = "已完成图案放置") {
-    if (!state.placement) return;
-    state.placement = null;
+    if (!state.dialogs.placement) return;
+    state.dialogs.placement = null;
     render();
     if (message) showToast(message);
   }
@@ -466,7 +476,7 @@
     const { pattern } = selectedPattern();
     if (!pattern) return;
     stop();
-    state.placement = placementAtCameraCenter(pattern);
+    state.dialogs.placement = placementAtCameraCenter(pattern);
     render();
     showToast(`正在放置：${pattern.name}。可拖动后松开放置多个。`, { duration: 5000 });
   }
@@ -483,7 +493,7 @@
   }
 
   function logicGenerationProgress(controller, progress) {
-    if (state.logicGenerationController !== controller || controller.signal.aborted) return;
+    if (state.dialogs.logicGenerationController !== controller || controller.signal.aborted) return;
     const layout = `布局 ${Number(progress.layoutVariant || 0) + 1}`;
     const channel = `通道 ${formatNumber(progress.branchPulseSpacing || 20)}×p30`;
     if (progress.phase === "routing") {
@@ -508,13 +518,13 @@
 
   async function generateLogicStructure(event) {
     event.preventDefault();
-    if (state.logicGenerationController) {
-      state.logicGenerationController.abort();
+    if (state.dialogs.logicGenerationController) {
+      state.dialogs.logicGenerationController.abort();
       setLogicCodeFeedback("正在取消生成…", "progress");
       return;
     }
     const controller = new AbortController();
-    state.logicGenerationController = controller;
+    state.dialogs.logicGenerationController = controller;
     setLogicGenerationState(true);
     setLogicCodeFeedback("正在解析并准备结构…页面仍可操作。", "progress");
     try {
@@ -533,7 +543,7 @@
       stop();
       elements.presetSelect.value = `builtin:${command.presetId}`;
       updatePresetDescription();
-      state.placement = placementAtCameraCenter(pattern);
+      state.dialogs.placement = placementAtCameraCenter(pattern);
       const connected = Boolean(pattern.connectionCount);
       setLogicCodeFeedback(
         `${command.expression} → 预期 O=${command.expected}；${connected ? `${pattern.connectionCount} 条滑翔机线路真实级联，` : ""}放置后运行至第 ${pattern.logic.observeGeneration} 代读取最终输出。`,
@@ -548,22 +558,22 @@
         setLogicCodeFeedback(error.message || "逻辑代码解析失败", "error");
       }
     } finally {
-      if (state.logicGenerationController === controller) {
-        state.logicGenerationController = null;
+      if (state.dialogs.logicGenerationController === controller) {
+        state.dialogs.logicGenerationController = null;
         setLogicGenerationState(false);
       }
     }
   }
 
   function selectedLogicFunction() {
-    return state.logicFunctionLibrary.functions.find(
+    return state.storage.logicFunctionLibrary.functions.find(
       (item) => item.id === elements.logicFunctionSelect.value,
     ) || null;
   }
 
   function callableLogicFunctions() {
     const used = new Set(["AND", "OR", "NOT"]);
-    return state.logicFunctionLibrary.functions.map((item, index) => {
+    return state.storage.logicFunctionLibrary.functions.map((item, index) => {
       const normalized = /^[A-Za-z][A-Za-z0-9_]*$/.test(item.name)
         ? item.name.toUpperCase()
         : `FUNC${index + 1}`;
@@ -579,7 +589,7 @@
   }
 
   function updateLogicFunctionButtons() {
-    const hasFunctions = state.logicFunctionLibrary.functions.length > 0;
+    const hasFunctions = state.storage.logicFunctionLibrary.functions.length > 0;
     elements.logicFunctionSelect.disabled = !hasFunctions;
     elements.loadLogicFunction.disabled = !hasFunctions;
     elements.manageLogicFunctions.disabled = !hasFunctions;
@@ -588,21 +598,21 @@
 
   function rebuildLogicFunctionOptions(preferredId) {
     elements.logicFunctionSelect.replaceChildren();
-    if (state.logicFunctionLibrary.functions.length === 0) {
+    if (state.storage.logicFunctionLibrary.functions.length === 0) {
       const option = document.createElement("option");
       option.value = "";
       option.textContent = "我的函数（暂无）";
       elements.logicFunctionSelect.append(option);
     } else {
       const callables = callableLogicFunctions();
-      for (const item of state.logicFunctionLibrary.functions) {
+      for (const item of state.storage.logicFunctionLibrary.functions) {
         const option = document.createElement("option");
         option.value = item.id;
         const callable = callables.find((entry) => entry.id === item.id);
         option.textContent = `${item.name} · ${callable.callName}`;
         elements.logicFunctionSelect.append(option);
       }
-      if (preferredId && state.logicFunctionLibrary.functions.some((item) => item.id === preferredId)) {
+      if (preferredId && state.storage.logicFunctionLibrary.functions.some((item) => item.id === preferredId)) {
         elements.logicFunctionSelect.value = preferredId;
       }
     }
@@ -647,21 +657,21 @@
   }
 
   function suggestedLogicFunctionName() {
-    const used = new Set(state.logicFunctionLibrary.functions.map((item) => FunctionStore.normalizeName(item.name)));
-    let index = state.logicFunctionLibrary.functions.length + 1;
+    const used = new Set(state.storage.logicFunctionLibrary.functions.map((item) => FunctionStore.normalizeName(item.name)));
+    let index = state.storage.logicFunctionLibrary.functions.length + 1;
     while (used.has(FunctionStore.normalizeName(`我的函数 ${index}`))) index += 1;
     return `我的函数 ${index}`;
   }
 
   function commitLogicFunctionLibrary(nextLibrary) {
-    if (state.logicFunctionStorageBlocked) {
+    if (state.storage.logicFunctionStorageBlocked) {
       throw new FunctionStore.LogicFunctionLibraryError(
         "STORAGE_BLOCKED",
         "原有本地函数库已损坏。为防止覆盖原数据，本页面已停止写入。",
       );
     }
     const saved = FunctionStore.saveLibrary(window.localStorage, nextLibrary);
-    state.logicFunctionLibrary = saved;
+    state.storage.logicFunctionLibrary = saved;
     return saved;
   }
 
@@ -670,7 +680,7 @@
       const definition = LogicCode.createFunctionDefinition(
         elements.logicCodeInput.value, callableLogicFunctions(),
       );
-      state.logicFunctionDraft = definition;
+      state.dialogs.logicFunctionDraft = definition;
       elements.saveLogicFunctionForm.reset();
       elements.logicFunctionName.value = suggestedLogicFunctionName();
       elements.saveLogicFunctionCode.textContent = definition.code;
@@ -689,17 +699,17 @@
     event.preventDefault();
     setDialogError(elements.saveLogicFunctionError);
     try {
-      if (!state.logicFunctionDraft) throw new LogicCode.LogicCodeError("函数定义无效");
+      if (!state.dialogs.logicFunctionDraft) throw new LogicCode.LogicCodeError("函数定义无效");
       const item = FunctionStore.createFunction({
         name: elements.logicFunctionName.value,
-        code: state.logicFunctionDraft.code,
-        inputs: state.logicFunctionDraft.inputs,
+        code: state.dialogs.logicFunctionDraft.code,
+        inputs: state.dialogs.logicFunctionDraft.inputs,
       });
-      const next = FunctionStore.addFunction(state.logicFunctionLibrary, item);
+      const next = FunctionStore.addFunction(state.storage.logicFunctionLibrary, item);
       commitLogicFunctionLibrary(next);
       rebuildLogicFunctionOptions(item.id);
       closeDialog(elements.saveLogicFunctionDialog);
-      state.logicFunctionDraft = null;
+      state.dialogs.logicFunctionDraft = null;
       showToast(`已保存到“我的函数”：${item.name}`);
     } catch (error) {
       setDialogError(elements.saveLogicFunctionError, error.message || "函数保存失败");
@@ -708,28 +718,28 @@
 
   function rebuildManageLogicFunctionOptions(preferredId) {
     elements.manageLogicFunctionSelect.replaceChildren();
-    for (const item of state.logicFunctionLibrary.functions) {
+    for (const item of state.storage.logicFunctionLibrary.functions) {
       const option = document.createElement("option");
       option.value = item.id;
       option.textContent = item.name;
       elements.manageLogicFunctionSelect.append(option);
     }
-    if (preferredId && state.logicFunctionLibrary.functions.some((item) => item.id === preferredId)) {
+    if (preferredId && state.storage.logicFunctionLibrary.functions.some((item) => item.id === preferredId)) {
       elements.manageLogicFunctionSelect.value = preferredId;
     }
     fillManageLogicFunctionForm();
   }
 
   function managedLogicFunction() {
-    return state.logicFunctionLibrary.functions.find(
+    return state.storage.logicFunctionLibrary.functions.find(
       (item) => item.id === elements.manageLogicFunctionSelect.value,
     ) || null;
   }
 
   function resetFunctionDeleteConfirmation() {
-    state.functionDeleteArmed = false;
-    window.clearTimeout(state.functionDeleteArmTimer);
-    state.functionDeleteArmTimer = null;
+    state.dialogs.functionDeleteArmed = false;
+    window.clearTimeout(state.dialogs.functionDeleteArmTimer);
+    state.dialogs.functionDeleteArmTimer = null;
     elements.deleteLogicFunction.textContent = "删除函数";
   }
 
@@ -743,8 +753,8 @@
   }
 
   function openManageLogicFunctionsDialog() {
-    if (state.logicFunctionLibrary.functions.length === 0) return;
-    rebuildManageLogicFunctionOptions(selectedLogicFunction()?.id || state.logicFunctionLibrary.functions[0].id);
+    if (state.storage.logicFunctionLibrary.functions.length === 0) return;
+    rebuildManageLogicFunctionOptions(selectedLogicFunction()?.id || state.storage.logicFunctionLibrary.functions[0].id);
     openDialog(elements.manageLogicFunctionsDialog);
     window.setTimeout(() => elements.manageLogicFunctionSelect.focus(), 0);
   }
@@ -758,7 +768,7 @@
         elements.manageLogicFunctionCode.value, callableLogicFunctions(),
       );
       const previousDefaults = new Map(item.inputs.map((input) => [input.name, input.defaultValue]));
-      const next = FunctionStore.updateFunction(state.logicFunctionLibrary, item.id, {
+      const next = FunctionStore.updateFunction(state.storage.logicFunctionLibrary, item.id, {
         name: elements.manageLogicFunctionName.value,
         code: definition.code,
         inputs: definition.inputs.map((input) => ({
@@ -781,18 +791,18 @@
   function deleteManagedLogicFunction() {
     const item = managedLogicFunction();
     if (!item) return;
-    if (!state.functionDeleteArmed) {
-      state.functionDeleteArmed = true;
+    if (!state.dialogs.functionDeleteArmed) {
+      state.dialogs.functionDeleteArmed = true;
       elements.deleteLogicFunction.textContent = "再次点击确认删除";
       setDialogError(elements.manageLogicFunctionError, `即将永久删除“${item.name}”。`);
-      state.functionDeleteArmTimer = window.setTimeout(() => {
+      state.dialogs.functionDeleteArmTimer = window.setTimeout(() => {
         resetFunctionDeleteConfirmation();
         setDialogError(elements.manageLogicFunctionError);
       }, 5000);
       return;
     }
     try {
-      const next = FunctionStore.deleteFunction(state.logicFunctionLibrary, item.id);
+      const next = FunctionStore.deleteFunction(state.storage.logicFunctionLibrary, item.id);
       commitLogicFunctionLibrary(next);
       rebuildLogicFunctionOptions();
       resetFunctionDeleteConfirmation();
@@ -806,23 +816,23 @@
 
   function initializeLogicFunctionLibrary() {
     try {
-      state.logicFunctionLibrary = FunctionStore.loadLibrary(window.localStorage);
+      state.storage.logicFunctionLibrary = FunctionStore.loadLibrary(window.localStorage);
     } catch (error) {
-      state.logicFunctionStorageBlocked = true;
-      state.logicFunctionLibrary = FunctionStore.createLibrary();
+      state.storage.logicFunctionStorageBlocked = true;
+      state.storage.logicFunctionLibrary = FunctionStore.createLibrary();
       window.setTimeout(() => showToast(error.message || "无法读取本地函数库", { duration: 7000 }), 0);
     }
     rebuildLogicFunctionOptions();
   }
 
   function togglePlacement() {
-    if (state.placement) finishPlacement();
+    if (state.dialogs.placement) finishPlacement();
     else startPlacement();
   }
 
   function transformPlacement(transform) {
-    if (!state.placement) return;
-    replacePlacementPattern(transform(state.placement.pattern));
+    if (!state.dialogs.placement) return;
+    replacePlacementPattern(transform(state.dialogs.placement.pattern));
   }
 
   function setDialogError(element, message = "") {
@@ -882,25 +892,25 @@
   }
 
   function suggestedPatternName() {
-    const used = new Set(state.patternLibrary.patterns.map((pattern) => PatternStore.normalizeName(pattern.name)));
-    let index = state.patternLibrary.patterns.length + 1;
+    const used = new Set(state.storage.patternLibrary.patterns.map((pattern) => PatternStore.normalizeName(pattern.name)));
+    let index = state.storage.patternLibrary.patterns.length + 1;
     while (used.has(PatternStore.normalizeName(`我的图案 ${index}`))) index += 1;
     return `我的图案 ${index}`;
   }
 
   function openSavePatternDialog() {
-    if (Life.countAlive(state.world) === 0) return;
+    if (Life.countAlive(state.world.cells) === 0) return;
     stop();
-    state.placement = null;
+    state.dialogs.placement = null;
     render();
     try {
-      state.saveDraftWorld = Life.cloneWorld(state.world);
-      const preview = PatternStore.normalizeWorld(state.saveDraftWorld);
+      state.pointer.saveDraftWorld = Life.cloneWorld(state.world.cells);
+      const preview = PatternStore.normalizeWorld(state.pointer.saveDraftWorld);
       drawPatternPreview(preview);
       elements.savePatternStats.textContent = `${formatNumber(preview.width)} × ${formatNumber(preview.height)} · ${formatNumber(preview.cells.length)} 个活细胞`;
       elements.savePatternForm.reset();
       elements.savePatternName.value = suggestedPatternName();
-      state.duplicatePatternId = null;
+      state.dialogs.duplicatePatternId = null;
       elements.updateExistingPattern.hidden = true;
       setDialogError(elements.savePatternError);
       openDialog(elements.savePatternDialog);
@@ -911,19 +921,19 @@
   }
 
   function commitPatternLibrary(nextLibrary) {
-    if (state.patternStorageBlocked) {
+    if (state.storage.patternStorageBlocked) {
       throw new PatternStore.PatternLibraryError(
         "STORAGE_BLOCKED",
         "原有本地图案库已损坏。为防止覆盖原数据，本页面已停止写入。",
       );
     }
     const saved = PatternStore.saveLibrary(window.localStorage, nextLibrary);
-    state.patternLibrary = saved;
+    state.storage.patternLibrary = saved;
     return saved;
   }
 
   function patternChangesFromDraft() {
-    const draft = PatternStore.createPatternFromWorld(state.saveDraftWorld, {
+    const draft = PatternStore.createPatternFromWorld(state.pointer.saveDraftWorld, {
       name: elements.savePatternName.value,
       description: elements.savePatternDescription.value,
     });
@@ -939,8 +949,8 @@
   function finishPatternSave(pattern, message) {
     rebuildPatternOptions(`custom:${pattern.id}`);
     closeDialog(elements.savePatternDialog);
-    state.saveDraftWorld = null;
-    state.duplicatePatternId = null;
+    state.pointer.saveDraftWorld = null;
+    state.dialogs.duplicatePatternId = null;
     render();
     showToast(message);
   }
@@ -950,16 +960,16 @@
     setDialogError(elements.savePatternError);
     elements.updateExistingPattern.hidden = true;
     try {
-      const pattern = PatternStore.createPatternFromWorld(state.saveDraftWorld, {
+      const pattern = PatternStore.createPatternFromWorld(state.pointer.saveDraftWorld, {
         name: elements.savePatternName.value,
         description: elements.savePatternDescription.value,
       });
-      const next = PatternStore.addPattern(state.patternLibrary, pattern);
+      const next = PatternStore.addPattern(state.storage.patternLibrary, pattern);
       commitPatternLibrary(next);
       finishPatternSave(pattern, `已保存到“我的图案”：${pattern.name}`);
     } catch (error) {
       if (error.code === "DUPLICATE_NAME") {
-        state.duplicatePatternId = error.patternId;
+        state.dialogs.duplicatePatternId = error.patternId;
         elements.updateExistingPattern.hidden = false;
         setDialogError(elements.savePatternError, `${error.message}。可以修改名称，或明确更新原图案。`);
       } else {
@@ -969,12 +979,12 @@
   }
 
   function updateExistingPattern() {
-    if (!state.duplicatePatternId) return;
+    if (!state.dialogs.duplicatePatternId) return;
     try {
       const changes = patternChangesFromDraft();
-      const next = PatternStore.updatePattern(state.patternLibrary, state.duplicatePatternId, changes);
+      const next = PatternStore.updatePattern(state.storage.patternLibrary, state.dialogs.duplicatePatternId, changes);
       commitPatternLibrary(next);
-      const updated = next.patterns.find((pattern) => pattern.id === state.duplicatePatternId);
+      const updated = next.patterns.find((pattern) => pattern.id === state.dialogs.duplicatePatternId);
       finishPatternSave(updated, `已更新自定义图案：${updated.name}`);
     } catch (error) {
       setDialogError(elements.savePatternError, error.message || "图案更新失败");
@@ -982,33 +992,33 @@
   }
 
   function resetDuplicateChoice() {
-    state.duplicatePatternId = null;
+    state.dialogs.duplicatePatternId = null;
     elements.updateExistingPattern.hidden = true;
     setDialogError(elements.savePatternError);
   }
 
   function rebuildManageOptions(preferredId) {
     elements.managePatternSelect.replaceChildren();
-    for (const pattern of state.patternLibrary.patterns) {
+    for (const pattern of state.storage.patternLibrary.patterns) {
       const option = document.createElement("option");
       option.value = pattern.id;
       option.textContent = pattern.name;
       elements.managePatternSelect.append(option);
     }
-    if (preferredId && state.patternLibrary.patterns.some((pattern) => pattern.id === preferredId)) {
+    if (preferredId && state.storage.patternLibrary.patterns.some((pattern) => pattern.id === preferredId)) {
       elements.managePatternSelect.value = preferredId;
     }
     fillManageForm();
   }
 
   function managedPattern() {
-    return state.patternLibrary.patterns.find((pattern) => pattern.id === elements.managePatternSelect.value) || null;
+    return state.storage.patternLibrary.patterns.find((pattern) => pattern.id === elements.managePatternSelect.value) || null;
   }
 
   function resetDeleteConfirmation() {
-    state.deleteArmed = false;
-    window.clearTimeout(state.deleteArmTimer);
-    state.deleteArmTimer = null;
+    state.dialogs.deleteArmed = false;
+    window.clearTimeout(state.dialogs.deleteArmTimer);
+    state.dialogs.deleteArmTimer = null;
     elements.deletePattern.textContent = "删除图案";
   }
 
@@ -1023,13 +1033,13 @@
   }
 
   function openManagePatternsDialog() {
-    if (state.patternLibrary.patterns.length === 0) return;
-    if (state.placement) {
-      state.placement = null;
+    if (state.storage.patternLibrary.patterns.length === 0) return;
+    if (state.dialogs.placement) {
+      state.dialogs.placement = null;
       render();
     }
     const { source, pattern } = selectedPattern();
-    rebuildManageOptions(source === "custom" ? pattern?.id : state.patternLibrary.patterns[0].id);
+    rebuildManageOptions(source === "custom" ? pattern?.id : state.storage.patternLibrary.patterns[0].id);
     openDialog(elements.managePatternsDialog);
     window.setTimeout(() => elements.managePatternSelect.focus(), 0);
   }
@@ -1039,7 +1049,7 @@
     const pattern = managedPattern();
     if (!pattern) return;
     try {
-      const next = PatternStore.updatePattern(state.patternLibrary, pattern.id, {
+      const next = PatternStore.updatePattern(state.storage.patternLibrary, pattern.id, {
         name: elements.managePatternName.value,
         description: elements.managePatternDescription.value,
       });
@@ -1057,18 +1067,18 @@
   function deleteManagedPattern() {
     const pattern = managedPattern();
     if (!pattern) return;
-    if (!state.deleteArmed) {
-      state.deleteArmed = true;
+    if (!state.dialogs.deleteArmed) {
+      state.dialogs.deleteArmed = true;
       elements.deletePattern.textContent = "再次点击确认删除";
       setDialogError(elements.managePatternError, `即将永久删除“${pattern.name}”，当前世界不会改变。`);
-      state.deleteArmTimer = window.setTimeout(() => {
+      state.dialogs.deleteArmTimer = window.setTimeout(() => {
         resetDeleteConfirmation();
         setDialogError(elements.managePatternError);
       }, 5000);
       return;
     }
     try {
-      const next = PatternStore.deletePattern(state.patternLibrary, pattern.id);
+      const next = PatternStore.deletePattern(state.storage.patternLibrary, pattern.id);
       commitPatternLibrary(next);
       rebuildPatternOptions();
       resetDeleteConfirmation();
@@ -1083,23 +1093,23 @@
 
   function initializePatternLibrary() {
     try {
-      state.patternLibrary = PatternStore.loadLibrary(window.localStorage);
+      state.storage.patternLibrary = PatternStore.loadLibrary(window.localStorage);
     } catch (error) {
-      state.patternStorageBlocked = true;
-      state.patternLibrary = PatternStore.createLibrary();
+      state.storage.patternStorageBlocked = true;
+      state.storage.patternLibrary = PatternStore.createLibrary();
       window.setTimeout(() => showToast(error.message || "无法读取本地图案库", { duration: 7000 }), 0);
     }
     rebuildPatternOptions();
   }
 
   function exportWorld() {
-    if (Life.countAlive(state.world) === 0) return;
-    const contents = JSON.stringify(Life.serialize(state.world, state.generation, state.camera), null, 2);
+    if (Life.countAlive(state.world.cells) === 0) return;
+    const contents = JSON.stringify(Life.serialize(state.world.cells, state.world.generation, state.world.camera), null, 2);
     const blob = new Blob([contents], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = `life-infinite-generation-${state.generation}.json`;
+    anchor.download = `life-infinite-generation-${state.world.generation}.json`;
     document.body.append(anchor);
     anchor.click();
     anchor.remove();
@@ -1116,12 +1126,12 @@
     try {
       const restored = Life.deserialize(await file.text());
       stop();
-      state.placement = null;
-      state.world = restored.world;
-      state.generation = restored.generation;
-      state.logicOutputs = [];
-      state.camera = RendererModule.createCamera(restored.view);
-      state.undoSnapshot = null;
+      state.dialogs.placement = null;
+      state.world.cells = restored.world;
+      state.world.generation = restored.generation;
+      state.world.logicOutputs = [];
+      state.world.camera = RendererModule.createCamera(restored.view);
+      state.world.undoSnapshot = null;
       render();
       showToast(restored.migratedFrom === 1 ? "旧版存档已导入并升级" : "世界与视图导入成功");
     } catch (error) {
@@ -1131,58 +1141,58 @@
 
   function rememberStrokeCell(row, column) {
     const key = Life.coordinateKey(row, column);
-    if (!state.strokeOriginal.has(key)) {
-      state.strokeOriginal.set(key, Life.isAlive(state.world, row, column));
+    if (!state.pointer.strokeOriginal.has(key)) {
+      state.pointer.strokeOriginal.set(key, Life.isAlive(state.world.cells, row, column));
     }
     return key;
   }
 
   function paintPointer(event) {
-    const coordinate = renderer.coordinateFromPointer(event, state.camera);
+    const coordinate = renderer.coordinateFromPointer(event, state.world.camera);
     const key = Life.coordinateKey(coordinate.row, coordinate.column);
-    if (state.painted.has(key)) return;
+    if (state.pointer.painted.has(key)) return;
     rememberStrokeCell(coordinate.row, coordinate.column);
-    state.painted.add(key);
-    Life.setCell(state.world, coordinate.row, coordinate.column, state.drawAlive);
-    state.logicOutputs = [];
-    state.undoSnapshot = null;
+    state.pointer.painted.add(key);
+    Life.setCell(state.world.cells, coordinate.row, coordinate.column, state.pointer.drawAlive);
+    state.world.logicOutputs = [];
+    state.world.undoSnapshot = null;
     render();
   }
 
   function updatePlacementFromEvent(event) {
-    if (!state.placement) return;
-    const coordinate = renderer.coordinateFromPointer(event, state.camera);
-    const row = coordinate.row - Math.floor(state.placement.pattern.height / 2);
-    const column = coordinate.column - Math.floor(state.placement.pattern.width / 2);
-    if (row === state.placement.row && column === state.placement.column) return;
-    state.placement.row = row;
-    state.placement.column = column;
+    if (!state.dialogs.placement) return;
+    const coordinate = renderer.coordinateFromPointer(event, state.world.camera);
+    const row = coordinate.row - Math.floor(state.dialogs.placement.pattern.height / 2);
+    const column = coordinate.column - Math.floor(state.dialogs.placement.pattern.width / 2);
+    if (row === state.dialogs.placement.row && column === state.dialogs.placement.column) return;
+    state.dialogs.placement.row = row;
+    state.dialogs.placement.column = column;
     render();
   }
 
   function beginPlacementDrag(event) {
-    if (!state.placement) return;
-    state.placement.pointerId = event.pointerId;
+    if (!state.dialogs.placement) return;
+    state.dialogs.placement.pointerId = event.pointerId;
     updatePlacementFromEvent(event);
   }
 
   function commitPlacement() {
-    if (!state.placement) return;
+    if (!state.dialogs.placement) return;
     try {
-      if (state.generation !== 0) state.logicOutputs = [];
-      state.world = Life.placePattern(
-        state.world,
-        state.placement.pattern.cells,
-        state.placement.row,
-        state.placement.column,
+      if (state.world.generation !== 0) state.world.logicOutputs = [];
+      state.world.cells = Life.placePattern(
+        state.world.cells,
+        state.dialogs.placement.pattern.cells,
+        state.dialogs.placement.row,
+        state.dialogs.placement.column,
         false,
       );
-      state.generation = 0;
-      const logic = state.placement.pattern.logic;
+      state.world.generation = 0;
+      const logic = state.dialogs.placement.pattern.logic;
       if (logic) {
-        state.logicOutputs.push({
-          row: state.placement.row,
-          column: state.placement.column,
+        state.world.logicOutputs.push({
+          row: state.dialogs.placement.row,
+          column: state.dialogs.placement.column,
           gate: logic.gate,
           inputs: [...logic.inputs],
           expected: logic.expected,
@@ -1192,12 +1202,12 @@
           result: null,
         });
       }
-      state.undoSnapshot = null;
+      state.world.undoSnapshot = null;
       render();
       showToast(
         logic
-          ? `已放置：${state.placement.pattern.name}；第 ${logic.observeGeneration} 代锁存输出`
-          : `已放置：${state.placement.pattern.name}，可继续放置`,
+          ? `已放置：${state.dialogs.placement.pattern.name}；第 ${logic.observeGeneration} 代锁存输出`
+          : `已放置：${state.dialogs.placement.pattern.name}，可继续放置`,
         { duration: logic ? 4200 : 2400 },
       );
     } catch (error) {
@@ -1206,37 +1216,37 @@
   }
 
   function beginDrawing(event) {
-    if (state.running) {
+    if (state.world.running) {
       showToast("请先暂停，再绘制细胞");
       return;
     }
-    const coordinate = renderer.coordinateFromPointer(event, state.camera);
-    state.drawingPointerId = event.pointerId;
-    state.drawAlive = !Life.isAlive(state.world, coordinate.row, coordinate.column);
-    state.painted.clear();
-    state.strokeOriginal.clear();
+    const coordinate = renderer.coordinateFromPointer(event, state.world.camera);
+    state.pointer.drawingPointerId = event.pointerId;
+    state.pointer.drawAlive = !Life.isAlive(state.world.cells, coordinate.row, coordinate.column);
+    state.pointer.painted.clear();
+    state.pointer.strokeOriginal.clear();
     paintPointer(event);
   }
 
   function endDrawing(revert = false) {
-    if (state.drawingPointerId === null) return;
+    if (state.pointer.drawingPointerId === null) return;
     if (revert) {
-      for (const [key, alive] of state.strokeOriginal) {
+      for (const [key, alive] of state.pointer.strokeOriginal) {
         const separator = key.indexOf(",");
         const row = Number(key.slice(0, separator));
         const column = Number(key.slice(separator + 1));
-        Life.setCell(state.world, row, column, alive);
+        Life.setCell(state.world.cells, row, column, alive);
       }
     }
-    state.drawingPointerId = null;
-    state.painted.clear();
-    state.strokeOriginal.clear();
+    state.pointer.drawingPointerId = null;
+    state.pointer.painted.clear();
+    state.pointer.strokeOriginal.clear();
     if (revert) render();
   }
 
   function beginPan(event, usesSpace = false) {
     const point = renderer.localPoint(event);
-    state.panGesture = {
+    state.pointer.panGesture = {
       pointerId: event.pointerId,
       lastX: point.x,
       lastY: point.y,
@@ -1254,15 +1264,15 @@
   }
 
   function beginTouchGesture() {
-    const entries = [...state.activePointers.entries()].slice(0, 2);
+    const entries = [...state.pointer.activePointers.entries()].slice(0, 2);
     if (entries.length < 2) return;
     endDrawing(true);
-    if (state.placement) state.placement.pointerId = null;
-    state.panGesture = null;
+    if (state.dialogs.placement) state.dialogs.placement.pointerId = null;
+    state.pointer.panGesture = null;
     const [left, right] = entries.map(([, point]) => point);
-    state.touchGesture = {
+    state.pointer.touchGesture = {
       pointerIds: entries.map(([pointerId]) => pointerId),
-      startCamera: RendererModule.createCamera(state.camera),
+      startCamera: RendererModule.createCamera(state.world.camera),
       startMidpoint: midpoint(left, right),
       startDistance: Math.max(1, distance(left, right)),
     };
@@ -1274,26 +1284,26 @@
     event.preventDefault();
     elements.canvas.focus({ preventScroll: true });
 
-    if (state.placement && event.pointerType !== "touch" && event.button === 2) {
+    if (state.dialogs.placement && event.pointerType !== "touch" && event.button === 2) {
       finishPlacement();
       return;
     }
 
     const point = renderer.localPoint(event);
-    state.activePointers.set(event.pointerId, point);
+    state.pointer.activePointers.set(event.pointerId, point);
     elements.canvas.setPointerCapture(event.pointerId);
 
     if (event.pointerType === "touch") {
-      if (state.activePointers.size >= 2) beginTouchGesture();
-      else if (state.placement) beginPlacementDrag(event);
-      else if (state.running) beginPan(event);
+      if (state.pointer.activePointers.size >= 2) beginTouchGesture();
+      else if (state.dialogs.placement) beginPlacementDrag(event);
+      else if (state.world.running) beginPan(event);
       else beginDrawing(event);
       return;
     }
 
-    if (event.button === 1 || (!state.placement && event.button === 2) || (event.button === 0 && state.spaceDown)) {
-      beginPan(event, event.button === 0 && state.spaceDown);
-    } else if (event.button === 0 && state.placement) {
+    if (event.button === 1 || (!state.dialogs.placement && event.button === 2) || (event.button === 0 && state.pointer.spaceDown)) {
+      beginPan(event, event.button === 0 && state.pointer.spaceDown);
+    } else if (event.button === 0 && state.dialogs.placement) {
       beginPlacementDrag(event);
     } else if (event.button === 0) {
       beginDrawing(event);
@@ -1301,10 +1311,10 @@
   }
 
   function updateTouchGesture() {
-    const gesture = state.touchGesture;
+    const gesture = state.pointer.touchGesture;
     if (!gesture) return;
-    const left = state.activePointers.get(gesture.pointerIds[0]);
-    const right = state.activePointers.get(gesture.pointerIds[1]);
+    const left = state.pointer.activePointers.get(gesture.pointerIds[0]);
+    const right = state.pointer.activePointers.get(gesture.pointerIds[1]);
     if (!left || !right) return;
     const currentMidpoint = midpoint(left, right);
     const factor = Math.max(0.01, distance(left, right) / gesture.startDistance);
@@ -1314,7 +1324,7 @@
       renderer.viewport(),
       factor,
     );
-    state.camera = RendererModule.panCamera(
+    state.world.camera = RendererModule.panCamera(
       zoomed,
       currentMidpoint.x - gesture.startMidpoint.x,
       currentMidpoint.y - gesture.startMidpoint.y,
@@ -1323,47 +1333,47 @@
   }
 
   function handlePointerMove(event) {
-    if (!state.activePointers.has(event.pointerId)) {
-      if (state.placement && event.pointerType !== "touch") updatePlacementFromEvent(event);
+    if (!state.pointer.activePointers.has(event.pointerId)) {
+      if (state.dialogs.placement && event.pointerType !== "touch") updatePlacementFromEvent(event);
       return;
     }
     event.preventDefault();
     const point = renderer.localPoint(event);
-    state.activePointers.set(event.pointerId, point);
+    state.pointer.activePointers.set(event.pointerId, point);
 
-    if (state.touchGesture) {
+    if (state.pointer.touchGesture) {
       updateTouchGesture();
       return;
     }
 
-    if (state.panGesture?.pointerId === event.pointerId) {
-      const deltaX = point.x - state.panGesture.lastX;
-      const deltaY = point.y - state.panGesture.lastY;
-      if (state.panGesture.usesSpace && Math.hypot(deltaX, deltaY) >= 2) state.spaceDragged = true;
-      state.camera = RendererModule.panCamera(state.camera, deltaX, deltaY);
-      state.panGesture.lastX = point.x;
-      state.panGesture.lastY = point.y;
+    if (state.pointer.panGesture?.pointerId === event.pointerId) {
+      const deltaX = point.x - state.pointer.panGesture.lastX;
+      const deltaY = point.y - state.pointer.panGesture.lastY;
+      if (state.pointer.panGesture.usesSpace && Math.hypot(deltaX, deltaY) >= 2) state.pointer.spaceDragged = true;
+      state.world.camera = RendererModule.panCamera(state.world.camera, deltaX, deltaY);
+      state.pointer.panGesture.lastX = point.x;
+      state.pointer.panGesture.lastY = point.y;
       render();
       return;
     }
 
-    if (state.placement?.pointerId === event.pointerId) {
+    if (state.dialogs.placement?.pointerId === event.pointerId) {
       updatePlacementFromEvent(event);
       return;
     }
 
-    if (state.drawingPointerId === event.pointerId) paintPointer(event);
+    if (state.pointer.drawingPointerId === event.pointerId) paintPointer(event);
   }
 
   function releasePointer(event, cancelled = false) {
-    const wasTouchGesture = state.touchGesture?.pointerIds.includes(event.pointerId);
-    const wasPlacement = state.placement?.pointerId === event.pointerId;
-    state.activePointers.delete(event.pointerId);
-    if (wasTouchGesture) state.touchGesture = null;
-    if (state.panGesture?.pointerId === event.pointerId) state.panGesture = null;
-    if (state.drawingPointerId === event.pointerId) endDrawing(cancelled);
-    if (wasPlacement && state.placement) {
-      state.placement.pointerId = null;
+    const wasTouchGesture = state.pointer.touchGesture?.pointerIds.includes(event.pointerId);
+    const wasPlacement = state.dialogs.placement?.pointerId === event.pointerId;
+    state.pointer.activePointers.delete(event.pointerId);
+    if (wasTouchGesture) state.pointer.touchGesture = null;
+    if (state.pointer.panGesture?.pointerId === event.pointerId) state.pointer.panGesture = null;
+    if (state.pointer.drawingPointerId === event.pointerId) endDrawing(cancelled);
+    if (wasPlacement && state.dialogs.placement) {
+      state.dialogs.placement.pointerId = null;
       if (!cancelled) commitPlacement();
       else render();
     }
@@ -1373,8 +1383,8 @@
 
   function zoomAtCenter(factor) {
     const viewport = renderer.viewport();
-    state.camera = RendererModule.zoomCameraAt(
-      state.camera,
+    state.world.camera = RendererModule.zoomCameraAt(
+      state.world.camera,
       { x: viewport.width / 2, y: viewport.height / 2 },
       viewport,
       factor,
@@ -1385,7 +1395,7 @@
   function handleWheel(event) {
     event.preventDefault();
     const factor = Math.exp(-event.deltaY * 0.0015);
-    state.camera = renderer.zoomAtPointer(event, state.camera, factor);
+    state.world.camera = renderer.zoomAtPointer(event, state.world.camera, factor);
     render();
   }
 
@@ -1396,24 +1406,24 @@
   function handleKeyDown(event) {
     if (ignoresGlobalShortcut()) return;
     if (document.activeElement?.tagName === "BUTTON" && event.code === "Space") return;
-    if (state.placement && event.key === "Escape") {
+    if (state.dialogs.placement && event.key === "Escape") {
       event.preventDefault();
       finishPlacement();
-    } else if (state.placement && event.key.toLowerCase() === "r") {
+    } else if (state.dialogs.placement && event.key.toLowerCase() === "r") {
       event.preventDefault();
       transformPlacement(Presets.rotatePattern);
-    } else if (state.placement && event.key.toLowerCase() === "f") {
+    } else if (state.dialogs.placement && event.key.toLowerCase() === "f") {
       event.preventDefault();
       transformPlacement(Presets.flipPattern);
     } else if (event.code === "Space") {
       event.preventDefault();
       if (event.repeat) return;
-      state.spaceDown = true;
-      state.spaceDragged = false;
+      state.pointer.spaceDown = true;
+      state.pointer.spaceDragged = false;
       updateCursorClasses();
     } else if (event.code === "ArrowRight") {
       event.preventDefault();
-      if (!state.running) advance();
+      if (!state.world.running) advance();
     } else if (event.key.toLowerCase() === "c") {
       event.preventDefault();
       clearWorld();
@@ -1424,10 +1434,10 @@
   }
 
   function handleKeyUp(event) {
-    if (event.code !== "Space" || !state.spaceDown) return;
+    if (event.code !== "Space" || !state.pointer.spaceDown) return;
     event.preventDefault();
-    state.spaceDown = false;
-    const shouldToggle = !state.spaceDragged && !state.panGesture && !state.placement;
+    state.pointer.spaceDown = false;
+    const shouldToggle = !state.pointer.spaceDragged && !state.pointer.panGesture && !state.dialogs.placement;
     updateCursorClasses();
     if (shouldToggle) toggleRun();
   }
@@ -1500,10 +1510,10 @@
   });
   function applySpeedInput(normalizeField = false) {
     if (!normalizeField && !SpeedControl.isValidInput(elements.speed.value)) return;
-    const nextSpeed = SpeedControl.normalize(elements.speed.value, state.speed);
+    const nextSpeed = SpeedControl.normalize(elements.speed.value, state.world.speed);
     if (normalizeField) elements.speed.value = String(nextSpeed);
-    if (nextSpeed === state.speed) return;
-    state.speed = nextSpeed;
+    if (nextSpeed === state.world.speed) return;
+    state.world.speed = nextSpeed;
     resetAnimationPacing();
   }
 
@@ -1519,12 +1529,12 @@
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keyup", handleKeyUp);
   window.addEventListener("blur", () => {
-    state.spaceDown = false;
-    state.spaceDragged = false;
+    state.pointer.spaceDown = false;
+    state.pointer.spaceDragged = false;
     updateCursorClasses();
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && state.running) stop({ message: "页面隐藏，已自动暂停" });
+    if (document.hidden && state.world.running) stop({ message: "页面隐藏，已自动暂停" });
   });
 
   initializePatternLibrary();
