@@ -166,7 +166,7 @@
         if (x + drawSize < 0 || y + drawSize < 0 || x > canvas.width || y > canvas.height) continue;
 
         if (camera.cellSize >= 2) {
-          const inset = Math.max(0.45 * ratio, Math.min(size, size) * 0.07);
+          const inset = Math.max(0.45 * ratio, size * 0.07);
           context.fillRect(x + inset, y + inset, Math.max(minimumPixel, size - inset * 2), Math.max(minimumPixel, size - inset * 2));
         } else {
           context.fillRect(Math.round(x), Math.round(y), minimumPixel, minimumPixel);
