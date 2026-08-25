@@ -6,12 +6,16 @@
   <meta name="color-scheme" content="dark">
   <meta name="theme-color" content="#101816">
   <title>康威生命游戏</title>
-  <meta name="description" content="一个无需联网、可以在本地直接运行的康威生命游戏。">
-  <link rel="stylesheet" href="styles/main.css?v=0.1.0">
-  <script defer src="scripts/life-engine.js?v=0.1.0"></script>
-  <script defer src="scripts/presets.js?v=0.1.0"></script>
-  <script defer src="scripts/renderer.js?v=0.1.0"></script>
-  <script defer src="scripts/app.js?v=0.1.0"></script>
+  <meta name="description" content="一个无需联网、拥有无限世界与自由缩放视图的康威生命游戏。">
+  <link rel="stylesheet" href="styles/main.css?v=0.14.2">
+  <script defer src="scripts/life-engine.js?v=0.14.2"></script>
+  <script defer src="scripts/presets.js?v=0.14.2"></script>
+  <script defer src="scripts/pattern-library.js?v=0.14.2"></script>
+  <script defer src="scripts/speed-control.js?v=0.14.2"></script>
+  <script defer src="scripts/logic-code.js?v=0.14.2"></script>
+  <script defer src="scripts/logic-function-library.js?v=0.14.2"></script>
+  <script defer src="scripts/renderer.js?v=0.14.2"></script>
+  <script defer src="scripts/app.js?v=0.14.2"></script>
 </head>
 <body>
   <div class="app-shell">
@@ -19,7 +23,7 @@
       <div>
         <p class="eyebrow">CELLULAR AUTOMATON · B3/S23</p>
         <h1>康威生命游戏</h1>
-        <p class="subtitle">画下最初的生命，观察简单规则如何长出复杂世界。</p>
+        <p class="subtitle">在一张没有边界的画布上，观察简单规则如何长出复杂世界。</p>
       </div>
 
       <div class="readouts" aria-label="模拟状态">
@@ -35,6 +39,14 @@
           <span class="readout-label">生命</span>
           <strong id="aliveValue">0</strong>
         </div>
+        <div class="readout">
+          <span class="readout-label">实际速度</span>
+          <strong id="actualSpeedValue">0/s</strong>
+        </div>
+        <div class="readout">
+          <span class="readout-label">倍率</span>
+          <strong id="zoomValue">×1.00</strong>
+        </div>
       </div>
     </header>
 
@@ -46,11 +58,11 @@
             <span class="button-label">开始</span>
           </button>
           <button class="button" id="stepButton" type="button" aria-keyshortcuts="ArrowRight">
-            <span aria-hidden="true">↦</span>
+            <span aria-hidden="true">→</span>
             单步
           </button>
           <button class="button" id="clearButton" type="button" aria-keyshortcuts="C" disabled>
-            <span aria-hidden="true">◇</span>
+            <span aria-hidden="true">○</span>
             清空
           </button>
           <button class="button" id="randomButton" type="button">
@@ -61,19 +73,34 @@
 
         <div class="control-group speed-control">
           <div class="control-heading">
-            <label for="speedRange">演化速度</label>
-            <output id="speedValue" for="speedRange">5 代/秒</output>
+            <label for="speedInput">演化速度</label>
+            <span>范围 1–1000</span>
           </div>
-          <input id="speedRange" type="range" min="1" max="20" value="5" step="1">
+          <div class="speed-input-row">
+            <input id="speedInput" type="number" min="1" max="1000" step="1" value="5" inputmode="numeric" aria-describedby="speedUnit">
+            <span id="speedUnit">代/秒</span>
+          </div>
         </div>
 
         <div class="control-group pattern-controls">
-          <label class="select-label" for="presetSelect">经典图案</label>
+          <label class="select-label" for="presetSelect">图案库</label>
           <div class="select-row">
             <select id="presetSelect" aria-describedby="presetDescription"></select>
-            <button class="button" id="loadPresetButton" type="button">放置</button>
+            <button class="button" id="loadPresetButton" type="button" aria-pressed="false">放置</button>
           </div>
           <p id="presetDescription" class="field-note"></p>
+          <div class="pattern-actions">
+            <button class="text-button" id="rotatePatternButton" type="button" aria-keyshortcuts="R" disabled>↻ 旋转</button>
+            <button class="text-button" id="flipPatternButton" type="button" aria-keyshortcuts="F" disabled>⇋ 翻转</button>
+            <button class="text-button" id="savePatternButton" type="button" disabled>保存为图案</button>
+            <button class="text-button" id="managePatternsButton" type="button" disabled>管理我的图案</button>
+          </div>
+        </div>
+
+        <div class="control-group view-controls" aria-label="视图控制">
+          <button class="button icon-button" id="zoomOutButton" type="button" aria-label="缩小视图">−</button>
+          <button class="button icon-button" id="zoomInButton" type="button" aria-label="放大视图">＋</button>
+          <button class="button" id="fitViewButton" type="button" aria-keyshortcuts="0">适应</button>
         </div>
 
         <div class="control-group file-controls" aria-label="保存与读取">
@@ -81,15 +108,37 @@
           <input id="importInput" type="file" accept="application/json,.json" hidden>
           <button class="button" id="exportButton" type="button" disabled>导出</button>
         </div>
+
+        <form class="control-group logic-code-controls" id="logicCodeForm" novalidate>
+          <div class="control-heading">
+            <label for="logicCodeInput">逻辑代码</label>
+            <span>生成真实碰撞结构</span>
+          </div>
+          <div class="logic-code-row">
+            <input id="logicCodeInput" type="text" placeholder="例如：AND(A,B),A=1,B=0 / NOT 1" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="logicCodeHelp logicCodeFeedback">
+            <button class="button" id="logicCodeButton" type="submit">生成结构</button>
+          </div>
+          <p class="field-note" id="logicCodeHelp">支持 0/1、AND/OR/NOT、保存函数嵌套调用和末尾变量赋值；英文函数名称可直接调用。</p>
+          <div class="logic-library-row" aria-label="我的函数库">
+            <select id="logicFunctionSelect" aria-label="我的函数" disabled>
+              <option value="">我的函数（暂无）</option>
+            </select>
+            <button class="button" id="loadLogicFunctionButton" type="button" disabled>载入</button>
+            <button class="text-button" id="saveLogicFunctionButton" type="button" disabled>保存函数</button>
+            <button class="text-button" id="manageLogicFunctionsButton" type="button" disabled>管理函数</button>
+          </div>
+          <div class="logic-function-inputs" id="logicFunctionInputs" aria-label="函数输入" hidden></div>
+          <p class="field-note logic-code-feedback" id="logicCodeFeedback" role="status" aria-live="polite"></p>
+        </form>
       </section>
 
       <section class="board-section" aria-labelledby="boardTitle">
         <div class="board-heading">
           <div>
-            <p class="section-kicker">WORLD 60 × 40</p>
-            <h2 id="boardTitle">生命观测区</h2>
+            <p class="section-kicker" id="worldPosition">WORLD ∞ · CENTER 0, 0</p>
+            <h2 id="boardTitle">生命观察区</h2>
           </div>
-          <p id="boardHint">点击或拖动绘制；从活细胞开始拖动可擦除。</p>
+          <p id="boardHint">左键绘制；中键、右键或按住空格拖动；滚轮缩放。</p>
         </div>
 
         <div class="board-frame" id="boardFrame">
@@ -97,8 +146,8 @@
             id="lifeCanvas"
             tabindex="0"
             role="img"
-            aria-keyshortcuts="Space ArrowRight C"
-            aria-label="60 列、40 行的康威生命游戏棋盘；当前为空。"
+            aria-keyshortcuts="Space ArrowRight C 0 R F Escape"
+            aria-label="无限大的康威生命游戏世界；当前为空。"
           ></canvas>
           <div class="scan-line" aria-hidden="true"></div>
         </div>
@@ -119,8 +168,8 @@
     </main>
 
     <footer class="app-footer">
-      <p><kbd>空格</kbd> 开始/暂停 · <kbd>→</kbd> 单步 · <kbd>C</kbd> 清空</p>
-      <p>所有计算只在你的浏览器中完成。</p>
+      <p><kbd>空格</kbd> 点击开始/暂停 · 按住拖动平移 · <kbd>滚轮</kbd> 缩放 · 放置时 <kbd>R</kbd> 旋转、<kbd>F</kbd> 翻转</p>
+      <p>世界没有边框，所有计算只在你的浏览器中完成。</p>
     </footer>
   </div>
 
@@ -128,6 +177,127 @@
     <span id="toastMessage"></span>
     <button id="undoButton" type="button" hidden>撤销</button>
   </div>
+
+  <dialog class="app-dialog" id="savePatternDialog" aria-labelledby="savePatternTitle">
+    <form id="savePatternForm" novalidate>
+      <div class="dialog-header">
+        <div>
+          <p class="section-kicker">MY PATTERN</p>
+          <h2 id="savePatternTitle">保存为自定义图案</h2>
+        </div>
+        <button class="dialog-close" id="closeSavePatternButton" type="button" aria-label="关闭">×</button>
+      </div>
+      <div class="pattern-preview-wrap">
+        <canvas id="patternPreview" width="320" height="160" aria-label="待保存图案预览"></canvas>
+        <p id="savePatternStats">—</p>
+      </div>
+      <label class="dialog-field" for="patternNameInput">
+        <span>名称 <small>英文名称可作为调用名</small></span>
+        <input id="patternNameInput" name="patternName" maxlength="30" autocomplete="off" required>
+      </label>
+      <label class="dialog-field" for="patternDescriptionInput">
+        <span>说明 <small>可选，最多 120 字</small></span>
+        <textarea id="patternDescriptionInput" name="patternDescription" maxlength="120" rows="3"></textarea>
+      </label>
+      <p class="dialog-error" id="savePatternError" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button class="button" id="cancelSavePatternButton" type="button">取消</button>
+        <button class="button danger-button" id="updateExistingPatternButton" type="button" hidden>更新同名图案</button>
+        <button class="button button-primary" type="submit">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="app-dialog" id="managePatternsDialog" aria-labelledby="managePatternsTitle">
+    <form id="managePatternsForm" novalidate>
+      <div class="dialog-header">
+        <div>
+          <p class="section-kicker">PATTERN LIBRARY</p>
+          <h2 id="managePatternsTitle">管理我的图案</h2>
+        </div>
+        <button class="dialog-close" id="closeManagePatternsButton" type="button" aria-label="关闭">×</button>
+      </div>
+      <label class="dialog-field" for="managePatternSelect">
+        <span>选择图案</span>
+        <select id="managePatternSelect"></select>
+      </label>
+      <p class="manage-pattern-meta" id="managePatternMeta">—</p>
+      <label class="dialog-field" for="managePatternNameInput">
+        <span>名称 <small>英文名称可作为调用名</small></span>
+        <input id="managePatternNameInput" maxlength="30" autocomplete="off" required>
+      </label>
+      <label class="dialog-field" for="managePatternDescriptionInput">
+        <span>说明 <small>可选，最多 120 字</small></span>
+        <textarea id="managePatternDescriptionInput" maxlength="120" rows="3"></textarea>
+      </label>
+      <p class="dialog-error" id="managePatternError" role="alert" hidden></p>
+      <div class="dialog-actions dialog-actions-split">
+        <button class="button danger-button" id="deletePatternButton" type="button">删除图案</button>
+        <div>
+          <button class="button" id="cancelManagePatternsButton" type="button">关闭</button>
+          <button class="button button-primary" type="submit">保存修改</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="app-dialog" id="saveLogicFunctionDialog" aria-labelledby="saveLogicFunctionTitle">
+    <form id="saveLogicFunctionForm" novalidate>
+      <div class="dialog-header">
+        <div>
+          <p class="section-kicker">MY FUNCTION</p>
+          <h2 id="saveLogicFunctionTitle">保存逻辑函数</h2>
+        </div>
+        <button class="dialog-close" id="closeSaveLogicFunctionButton" type="button" aria-label="关闭">×</button>
+      </div>
+      <label class="dialog-field" for="logicFunctionNameInput">
+        <span>名称 <b aria-hidden="true">*</b></span>
+        <input id="logicFunctionNameInput" maxlength="30" autocomplete="off" required>
+      </label>
+      <div class="function-code-preview">
+        <span>将保存的代码</span>
+        <code id="saveLogicFunctionCode">—</code>
+        <small id="saveLogicFunctionInputs">输入：无</small>
+      </div>
+      <p class="dialog-error" id="saveLogicFunctionError" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button class="button" id="cancelSaveLogicFunctionButton" type="button">取消</button>
+        <button class="button button-primary" type="submit">保存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="app-dialog" id="manageLogicFunctionsDialog" aria-labelledby="manageLogicFunctionsTitle">
+    <form id="manageLogicFunctionsForm" novalidate>
+      <div class="dialog-header">
+        <div>
+          <p class="section-kicker">FUNCTION LIBRARY</p>
+          <h2 id="manageLogicFunctionsTitle">管理我的函数</h2>
+        </div>
+        <button class="dialog-close" id="closeManageLogicFunctionsButton" type="button" aria-label="关闭">×</button>
+      </div>
+      <label class="dialog-field" for="manageLogicFunctionSelect">
+        <span>选择函数</span>
+        <select id="manageLogicFunctionSelect"></select>
+      </label>
+      <label class="dialog-field" for="manageLogicFunctionName">
+        <span>名称 <b aria-hidden="true">*</b></span>
+        <input id="manageLogicFunctionName" maxlength="30" autocomplete="off" required>
+      </label>
+      <label class="dialog-field" for="manageLogicFunctionCode">
+        <span>逻辑代码 <small>最多 200 字</small></span>
+        <textarea id="manageLogicFunctionCode" maxlength="200" rows="5" spellcheck="false" required></textarea>
+      </label>
+      <p class="dialog-error" id="manageLogicFunctionError" role="alert" hidden></p>
+      <div class="dialog-actions dialog-actions-split">
+        <button class="button danger-button" id="deleteLogicFunctionButton" type="button">删除函数</button>
+        <div>
+          <button class="button" id="cancelManageLogicFunctionsButton" type="button">关闭</button>
+          <button class="button button-primary" type="submit">保存修改</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
 
   <noscript>此游戏需要启用 JavaScript 才能运行。</noscript>
 </body>
