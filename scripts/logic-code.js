@@ -361,7 +361,8 @@
         }
         let body = custom.code;
         custom.inputs.forEach((input, parameterIndex) => {
-          body = body.replace(new RegExp(`\\b${input.name}\\b`, "g"), args[parameterIndex]);
+          // 用函数式替换，避免实参文本含 $&/$1/$$ 等被 String.prototype.replace 当作特殊序列改写输出
+          body = body.replace(new RegExp(`\\b${input.name}\\b`, "g"), () => args[parameterIndex]);
         });
         result = appendExpanded(result, expandExpression(body, [...stack, callName]));
         index = close;
