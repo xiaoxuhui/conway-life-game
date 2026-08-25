@@ -378,6 +378,11 @@
     state.world.generation = snapshot.generation;
     state.world.camera = snapshot.camera;
     state.world.logicOutputs = snapshot.logicOutputs || [];
+    if (snapshot.wasRunning) {
+      start();
+    } else {
+      state.world.running = false;
+    }
     hideToast();
     render();
     showToast("已恢复清空前的世界");
