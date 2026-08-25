@@ -64,7 +64,18 @@
     const assignments = new Map();
     for (const segment of segments) {
       const match = segment.match(/^([A-Za-z][A-Za-z0-9_]*)\s*=\s*([01])$/);
-      if (!match) throw new LogicCodeError(`变量赋值“${segment}”无效；值只能是 0 或 1`);
+      if (!match) {
+        if (!segment.includes("=")) {
+          throw new LogicCodeError(`赋值段“${segment}”缺少赋值符号“=”；每段应为「变量=值」形式`);
+        }
+        const equalsIndex = segment.indexOf("=");
+        const name = segment.slice(0, equalsIndex).trim();
+        const value = segment.slice(equalsIndex + 1).trim();
+        if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(name)) {
+          throw new LogicCodeError(`变量名“${name}”无效；必须以字母开头，仅含字母、数字与下划线`);
+        }
+        throw new LogicCodeError(`变量 ${name} 的赋值值“${value}”无效；逻辑变量只能为 0 或 1`);
+      }
       const name = match[1].toUpperCase();
       if (assignments.has(name)) throw new LogicCodeError(`变量 ${name} 重复赋值`);
       assignments.set(name, Number(match[2]));
