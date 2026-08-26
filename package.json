@@ -3,6 +3,23 @@
   "version": "0.15.0",
   "private": true,
   "description": "A dependency-free, infinite-world Conway's Game of Life.",
+  "license": "MIT",
+  "author": "xiaoxuhui",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiaoxuhui/conway-life-game.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xiaoxuhui/conway-life-game/issues"
+  },
+  "homepage": "https://github.com/xiaoxuhui/conway-life-game#readme",
+  "keywords": [
+    "conway-game-of-life",
+    "cellular-automata",
+    "canvas",
+    "logic-gates",
+    "offline"
+  ],
   "engines": {
     "node": ">=20.19.0"
   },

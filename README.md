@@ -1,5 +1,8 @@
 # 康威生命游戏
 
+[![CI](https://github.com/xiaoxuhui/conway-life-game/actions/workflows/test.yml/badge.svg)](https://github.com/xiaoxuhui/conway-life-game/actions/workflows/test.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 一个使用原生 HTML、CSS 和 JavaScript 实现的本地康威生命游戏，支持无边界世界、自由平移和连续缩放。
 
 GitHub：<https://github.com/xiaoxuhui/conway-life-game>
@@ -51,6 +54,11 @@ GitHub：<https://github.com/xiaoxuhui/conway-life-game>
 - [开发计划与阶段门](docs/roadmap.md)
 - [实施清单](docs/implementation-plan.md)
 - [测试报告](docs/test-report.md)
+- [v0.15.0 重构测试报告](docs/重构版测试报告-v0.15.0.md)
+- [变更日志](CHANGELOG.md)
+- [贡献指南](CONTRIBUTING.md)
+- [安全策略](SECURITY.md)
+- [社区行为准则](CODE_OF_CONDUCT.md)
 - [阶段总结](docs/stage-summary.md)
 
 逻辑门构造方法参考 Jean-Philippe Rennard 的公开研究：[Implementation of Logical Functions in the Game of Life](https://arxiv.org/abs/cs/0406009)。本项目中的细胞布局已由自身的 B3/S23 规则引擎重新验证。
@@ -69,9 +77,12 @@ python -m http.server 8000
 
 ## 自动化测试
 
-测试只使用 Node.js 自带的测试运行器，不需要安装依赖：
+开发工具要求 Node.js 20.19 或更高版本。应用运行时仍然零依赖；仓库只安装 ESLint 作为开发依赖：
 
 ```powershell
+npm ci
+npm run check
+npm run lint
 npm test
 ```
 
