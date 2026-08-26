@@ -47,6 +47,18 @@ test("计算下一代不会修改输入世界", () => {
   assert.notStrictEqual(next.cells, world.cells);
 });
 
+test("细胞集合演化核心与世界演化结果一致且不修改输入", () => {
+  const cells = new Set(["0,0", "0,1", "0,2"]);
+  const original = new Set(cells);
+
+  const nextCells = Life.nextCellSet(cells);
+  const nextWorld = Life.nextGeneration({ cells });
+
+  assert.deepEqual(nextCells, nextWorld.cells);
+  assert.deepEqual(cells, original);
+  assert.notEqual(nextCells, cells);
+});
+
 test("重复坐标只保存一个活细胞", () => {
   const world = Life.createWorld([[0, 0], [0, 0], [0, 0]]);
   assert.equal(Life.countAlive(world), 1);

@@ -1,9 +1,16 @@
 (function exposeLogicCode(root, factory) {
-  const api = factory();
+  const lifeEngine = typeof module === "object" && module.exports
+    ? require("./life-engine.js")
+    : root.LifeEngine;
+  const api = factory(lifeEngine);
   if (typeof module === "object" && module.exports) module.exports = api;
   root.LogicCode = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function createLogicCode() {
+})(typeof globalThis !== "undefined" ? globalThis : this, function createLogicCode(LifeEngine) {
   "use strict";
+
+  if (!LifeEngine || typeof LifeEngine.nextCellSet !== "function") {
+    throw new Error("LogicCode 需要先加载 LifeEngine");
+  }
 
   class LogicCodeError extends Error {
     constructor(message) {
@@ -440,29 +447,9 @@
   function advanceCells(coordinates, generations) {
     let cells = new Set(coordinates.map(([row, column]) => `${row},${column}`));
     for (let generation = 0; generation < generations; generation += 1) {
-      cells = nextCellSet(cells);
+      cells = LifeEngine.nextCellSet(cells);
     }
     return [...cells].map((key) => key.split(",").map(Number));
-  }
-
-  function nextCellSet(cells) {
-      const neighbors = new Map();
-      for (const key of cells) {
-        const [row, column] = key.split(",").map(Number);
-        if (!neighbors.has(key)) neighbors.set(key, 0);
-        for (let rowOffset = -1; rowOffset <= 1; rowOffset += 1) {
-          for (let columnOffset = -1; columnOffset <= 1; columnOffset += 1) {
-            if (rowOffset === 0 && columnOffset === 0) continue;
-            const neighbor = `${row + rowOffset},${column + columnOffset}`;
-            neighbors.set(neighbor, (neighbors.get(neighbor) || 0) + 1);
-          }
-        }
-      }
-      const next = new Set();
-      for (const [key, count] of neighbors) {
-        if (count === 3 || (count === 2 && cells.has(key))) next.add(key);
-      }
-      return next;
   }
 
   function canonicalShape(coordinates) {
@@ -731,7 +718,7 @@
       const phases = [];
       for (let phase = 0; phase < 30; phase += 1) {
         phases.push(new Set(zones[groupIndex].filter((key) => evolving.has(key))));
-        evolving = nextCellSet(evolving);
+        evolving = LifeEngine.nextCellSet(evolving);
       }
       const periodic = zones[groupIndex].every(
         (key) => evolving.has(key) === phases[0].has(key),
@@ -753,7 +740,7 @@
 
   function advanceAperiodicReferences(references) {
     for (const reference of references) {
-      if (!reference.phases) reference.current = nextCellSet(reference.current);
+      if (!reference.phases) reference.current = LifeEngine.nextCellSet(reference.current);
     }
   }
 
@@ -783,7 +770,7 @@
         return { safe: false, generation, groupIndex, horizon };
       }
       if (generation < horizon) {
-        world = nextCellSet(world);
+        world = LifeEngine.nextCellSet(world);
         advanceAperiodicReferences(references);
       }
     }
@@ -822,7 +809,7 @@
         return { safe: false, generation, groupIndex, horizon };
       }
       if (generation < horizon) {
-        world = nextCellSet(world);
+        world = LifeEngine.nextCellSet(world);
         advanceAperiodicReferences(references);
       }
       if (generation < horizon && clock() - sliceStarted >= sliceBudgetMs) {

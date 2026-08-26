@@ -83,11 +83,11 @@
     return world.cells.size;
   }
 
-  function nextGeneration(world) {
-    assertWorld(world);
+  function nextCellSet(cells) {
+    if (!(cells instanceof Set)) throw new TypeError("活细胞集合无效");
     const neighborCounts = new Map();
 
-    for (const key of world.cells) {
+    for (const key of cells) {
       const [row, column] = parseKey(key);
       if (!neighborCounts.has(key)) neighborCounts.set(key, 0);
       for (let rowOffset = -1; rowOffset <= 1; rowOffset += 1) {
@@ -102,11 +102,16 @@
       }
     }
 
-    const next = createWorld();
+    const next = new Set();
     for (const [key, count] of neighborCounts) {
-      if (count === 3 || (count === 2 && world.cells.has(key))) next.cells.add(key);
+      if (count === 3 || (count === 2 && cells.has(key))) next.add(key);
     }
     return next;
+  }
+
+  function nextGeneration(world) {
+    assertWorld(world);
+    return { cells: nextCellSet(world.cells) };
   }
 
   function randomWorld(rows = 40, columns = 60, density = 0.25, random = Math.random, centerRow = 0, centerColumn = 0) {
@@ -249,6 +254,7 @@
     createWorld,
     deserialize,
     isAlive,
+    nextCellSet,
     nextGeneration,
     placePattern,
     randomWorld,
