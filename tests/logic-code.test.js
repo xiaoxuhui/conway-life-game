@@ -17,6 +17,28 @@ test("逻辑代码门面由解析、展开、编译和安全验证模块组成",
   assert.equal(LogicCode.validateGunSafety, LogicSafety.validateGunSafety);
 });
 
+test("电路相位预演同步推进输出探针与终端元数据", () => {
+  const signalCells = [[0, 1], [1, 2], [2, 0], [2, 1], [2, 2]];
+  const terminalCells = [[10, 9], [10, 10], [10, 11]];
+  const shifted = LogicCompile.phaseShiftCircuit({
+    cells: [...signalCells, ...terminalCells],
+    inputOrigins: [],
+    signalCells,
+    signalDelta: [1, 1],
+    terminalCells,
+    gunGroups: [],
+    observeGeneration: 20,
+    connections: [{ alignGeneration: 12, cells: signalCells }],
+  }, 1);
+  const keys = (coordinates) => new Set(coordinates.map((coordinate) => coordinate.join(",")));
+
+  assert.deepEqual(keys(shifted.signalCells), Life.nextCellSet(keys(signalCells)));
+  assert.deepEqual(keys(shifted.terminalCells), Life.nextCellSet(keys(terminalCells)));
+  assert.deepEqual(keys(shifted.connections[0].cells), Life.nextCellSet(keys(signalCells)));
+  assert.equal(shifted.observeGeneration, 20);
+  assert.equal(shifted.connections[0].alignGeneration, 12);
+});
+
 test("英文与符号 NOT 表达式映射到对应内置结构", () => {
   assert.deepEqual(LogicCode.parse("NOT 0"), {
     gate: "NOT", inputs: [0], expected: 1, presetId: "logic-not-0", expression: "NOT 0",

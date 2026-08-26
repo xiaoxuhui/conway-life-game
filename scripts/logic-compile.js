@@ -91,14 +91,15 @@
     return {
       ...circuit,
       cells: advanceCells(circuit.cells, generations),
+      signalCells: advanceCells(circuit.signalCells, generations),
+      terminalCells: advanceCells(circuit.terminalCells, generations),
       gunGroups: circuit.gunGroups.map((group) => ({
         zoneCells: group.zoneCells,
         referenceCells: advanceCells(group.referenceCells, generations),
       })),
-      observeGeneration: circuit.observeGeneration - generations,
       connections: circuit.connections.map((connection) => ({
         ...connection,
-        alignGeneration: connection.alignGeneration - generations,
+        cells: advanceCells(connection.cells, generations),
       })),
     };
   }
