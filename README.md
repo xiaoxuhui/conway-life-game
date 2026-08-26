@@ -4,7 +4,7 @@
 
 GitHub：<https://github.com/xiaoxuhui/conway-life-game>
 
-> 当前状态：v0.14.2 可用版本已完成，包含无限世界、高速批量演化、带多布局与可调通道的任意嵌套逻辑、可嵌套调用的参数函数库、24 种经典内置图案和自定义图案库。
+> 当前状态：v0.15.0 重构候选版已完成，包含无限世界、高速批量演化、带多布局与可调通道的任意嵌套逻辑、可嵌套调用的参数函数库、24 种经典内置图案和自定义图案库。
 
 ## 项目目标
 
@@ -92,10 +92,15 @@ scripts/life-engine.js     稀疏无限世界、规则和 JSON 格式
 scripts/presets.js         经典图案
 scripts/pattern-library.js 自定义图案归一化、校验与本地持久化
 scripts/speed-control.js   手动速度输入校验与范围规整
-scripts/logic-code.js      变量逻辑代码解析与真实滑翔机级联
+scripts/logic-parse.js     变量逻辑代码解析
+scripts/logic-expand.js    保存函数展开与实例化
+scripts/logic-compile.js   真实滑翔机电路编译
+scripts/logic-safety.js    枪体安全验证
+scripts/logic-code.js      逻辑结构组合与兼容门面
 scripts/logic-function-library.js  我的函数本地持久化与校验
 scripts/renderer.js        Canvas 多尺度渲染、相机和坐标转换
-scripts/app.js             控制、计时器、绘制与平移缩放交互
+scripts/dialogs.js         对话框、图案库与函数库交互
+scripts/app.js             控制、计时、绘制与平移缩放交互
 tests/                     自动化测试
 docs/                      需求、设计、计划与测试记录
 ```
@@ -116,4 +121,4 @@ docs/                      需求、设计、计划与测试记录
 
 ## 许可证
 
-暂未选择许可证；在正式版本发布或接受外部贡献前确定。
+项目采用 MIT License，详见 [LICENSE](LICENSE)。
