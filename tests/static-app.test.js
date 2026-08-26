@@ -8,6 +8,15 @@ const path = require("node:path");
 const projectRoot = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(projectRoot, "index.html"), "utf8");
 const appSource = fs.readFileSync(path.join(projectRoot, "scripts", "app.js"), "utf8");
+const packageMetadata = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
+
+test("页面本地资源缓存版本与项目版本一致", () => {
+  const resources = [...html.matchAll(/(?:src|href)=["']([^"']+\?v=([^"']+))["']/g)];
+  assert.ok(resources.length > 0);
+  for (const [, resource, version] of resources) {
+    assert.equal(version, packageMetadata.version, `${resource} 的缓存版本应与 package.json 一致`);
+  }
+});
 
 test("页面包含全部核心控件", () => {
   for (const id of [
