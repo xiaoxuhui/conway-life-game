@@ -5,7 +5,7 @@
   "description": "A dependency-free, infinite-world Conway's Game of Life.",
   "scripts": {
     "test": "node --test",
-    "check": "node --check scripts/life-engine.js && node --check scripts/presets.js && node --check scripts/pattern-library.js && node --check scripts/speed-control.js && node --check scripts/logic-code.js && node --check scripts/logic-function-library.js && node --check scripts/renderer.js && node --check scripts/app.js",
+    "check": "node --check scripts/life-engine.js && node --check scripts/presets.js && node --check scripts/pattern-library.js && node --check scripts/speed-control.js && node --check scripts/logic-parse.js && node --check scripts/logic-expand.js && node --check scripts/logic-compile.js && node --check scripts/logic-safety.js && node --check scripts/logic-code.js && node --check scripts/logic-function-library.js && node --check scripts/renderer.js && node --check scripts/dialogs.js && node --check scripts/app.js",
     "lint": "eslint scripts"
   },
   "devDependencies": {

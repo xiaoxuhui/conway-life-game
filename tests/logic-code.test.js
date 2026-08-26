@@ -3,8 +3,19 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const LogicCode = require("../scripts/logic-code.js");
+const LogicParse = require("../scripts/logic-parse.js");
+const LogicExpand = require("../scripts/logic-expand.js");
+const LogicCompile = require("../scripts/logic-compile.js");
+const LogicSafety = require("../scripts/logic-safety.js");
 const Presets = require("../scripts/presets.js");
 const Life = require("../scripts/life-engine.js");
+
+test("逻辑代码门面由解析、展开、编译和安全验证模块组成", () => {
+  assert.equal(LogicCode.parse, LogicParse.parse);
+  assert.equal(LogicCode.expandFunctions, LogicExpand.expandFunctions);
+  assert.equal(typeof LogicCompile.compileCircuit, "function");
+  assert.equal(LogicCode.validateGunSafety, LogicSafety.validateGunSafety);
+});
 
 test("英文与符号 NOT 表达式映射到对应内置结构", () => {
   assert.deepEqual(LogicCode.parse("NOT 0"), {
