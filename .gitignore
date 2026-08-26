@@ -17,6 +17,8 @@ temp/
 
 # Test and coverage output
 coverage/
+playwright-report/
+test-results/
 
 # Dependencies (reserved for future tooling; MVP should not require them)
 node_modules/

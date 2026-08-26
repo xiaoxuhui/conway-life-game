@@ -20,11 +20,13 @@ module.exports = [
       globals: {
         ...crossScriptGlobals,
         globalThis: "readonly",
+        __dirname: "readonly",
         module: "readonly",
         require: "readonly",
         window: "readonly",
         document: "readonly",
         console: "readonly",
+        process: "readonly",
         performance: "readonly",
         AbortController: "readonly",
         Blob: "readonly",

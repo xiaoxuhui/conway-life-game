@@ -24,11 +24,14 @@
     "node": ">=20.19.0"
   },
   "scripts": {
+    "serve": "node scripts/serve-static.js",
     "test": "node --test",
-    "check": "node --check scripts/life-engine.js && node --check scripts/presets.js && node --check scripts/pattern-library.js && node --check scripts/speed-control.js && node --check scripts/logic-parse.js && node --check scripts/logic-expand.js && node --check scripts/logic-compile.js && node --check scripts/logic-safety.js && node --check scripts/logic-code.js && node --check scripts/logic-function-library.js && node --check scripts/renderer.js && node --check scripts/dialogs.js && node --check scripts/app.js",
+    "test:browser": "playwright test",
+    "check": "node --check scripts/life-engine.js && node --check scripts/presets.js && node --check scripts/pattern-library.js && node --check scripts/speed-control.js && node --check scripts/logic-parse.js && node --check scripts/logic-expand.js && node --check scripts/logic-compile.js && node --check scripts/logic-safety.js && node --check scripts/logic-code.js && node --check scripts/logic-function-library.js && node --check scripts/renderer.js && node --check scripts/dialogs.js && node --check scripts/app.js && node --check scripts/serve-static.js && node --check playwright.config.js && node --check e2e/app.smoke.spec.js",
     "lint": "eslint scripts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "eslint": "^10.8.0"
   }
 }
