@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 私密安全报告
+    url: https://github.com/xiaoxuhui/conway-life-game/security/policy
+    about: 请不要公开披露安全漏洞
