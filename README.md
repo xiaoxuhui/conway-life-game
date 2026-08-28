@@ -6,8 +6,11 @@
 一个使用原生 HTML、CSS 和 JavaScript 实现的本地康威生命游戏，支持无边界世界、自由平移和连续缩放。
 
 GitHub：<https://github.com/xiaoxuhui/conway-life-game>
+在线演示：<https://xiaoxuhui.github.io/conway-life-game/>
 
-> 当前状态：v0.15.0 重构候选版已完成，包含无限世界、高速批量演化、带多布局与可调通道的任意嵌套逻辑、可嵌套调用的参数函数库、24 种经典内置图案和自定义图案库。
+![康威生命游戏界面截图](docs/screenshot.png)
+
+> 当前状态：v0.15.0 已完成，包含无限世界、高速批量演化、带多布局与可调通道的任意嵌套逻辑、可嵌套调用的参数函数库、24 种经典内置图案和自定义图案库。
 
 ## 项目目标
 
