@@ -84,6 +84,7 @@
     worldPosition: document.querySelector("#worldPosition"),
     zoomIn: document.querySelector("#zoomInButton"),
     zoomOut: document.querySelector("#zoomOutButton"),
+    zoomValue: document.querySelector("#zoomValue"),
     cancelManagePatterns: document.querySelector("#cancelManagePatternsButton"),
     cancelSavePattern: document.querySelector("#cancelSavePatternButton"),
     closeManagePatterns: document.querySelector("#closeManagePatternsButton"),
