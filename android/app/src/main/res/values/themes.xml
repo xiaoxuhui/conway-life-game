@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 网页为深色主题（--bg #0B100F），系统栏跟随深色，与页面融为一体 -->
+    <!-- 网页为深色主题（背景 #0B100F），系统栏跟随深色，与页面融为一体 -->
     <style name="Theme.ConwayLifeGame" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/app_background</item>
         <item name="android:statusBarColor">@color/app_background</item>

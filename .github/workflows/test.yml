@@ -33,6 +33,10 @@ jobs:
         run: npm run check
       - name: Lint source
         run: npm run lint
+      # 安卓外壳的结构断言（tests/android-shell.test.js）会校验 assets 与源一致，
+      # 而 assets 不入库，故须先同步生成
+      - name: Sync web assets for android shell assertions
+        run: npm run sync:android
       - name: Run test suite
         run: npm test
 
