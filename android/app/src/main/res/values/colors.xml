@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 与网页 --bg 一致（深色墨绿），避免启动时闪白 -->
+    <color name="app_background">#0B100F</color>
+    <!-- 与网页 --accent / --accent-strong 一致，用于状态栏与控件着色 -->
+    <color name="app_accent">#40D894</color>
+</resources>

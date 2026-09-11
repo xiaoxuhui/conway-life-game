@@ -1,0 +1,25 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# 本地环境
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+
+# 构建产物
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# 网页资源（index.html / scripts / styles）由 scripts/sync-android-assets.mjs
+# 从仓库根同步生成，不入库，保持网页单一数据源
+app/src/main/assets/
+
+# IDE
+.idea/
+*.iml
+.DS_Store

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 自适应图标背景层：取样自应用图标原图的深墨绿背景（中心略亮） -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <gradient
+        android:angle="270"
+        android:startColor="#0A1A15"
+        android:centerColor="#071210"
+        android:endColor="#040B0B" />
+</shape>
