@@ -7,10 +7,11 @@
 
 GitHub：<https://github.com/xiaoxuhui/conway-life-game>
 在线演示：<https://xiaoxuhui.github.io/conway-life-game/>
+安卓版下载：<https://github.com/xiaoxuhui/conway-life-game/releases/latest>
 
 ![康威生命游戏界面截图](docs/screenshot.png)
 
-> 当前状态：v0.15.0 已完成，后续开发分支包含无限世界、高速批量演化、带多布局与可调通道的任意嵌套逻辑、可嵌套调用的参数函数库、26 种内置图案和自定义图案库。
+> 当前状态：v0.16.0。含无限世界、高速批量演化、带多布局与可调通道的任意嵌套逻辑、可嵌套调用的参数函数库、26 种内置图案和自定义图案库、「我的函数 / 我的图案」的 JSON 导入导出，以及完全离线的安卓 APK 版本。
 
 ## 项目目标
 
