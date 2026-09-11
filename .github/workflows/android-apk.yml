@@ -98,7 +98,7 @@ jobs:
           echo "::notice title=APK 产物::$(basename "$APK") | 大小 $(du -h "$APK" | cut -f1) | sha256 $(sha256sum "$APK" | cut -c1-16)"
 
       - name: 上传 APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: conway-life-game-debug-apk
           path: |
@@ -108,7 +108,7 @@ jobs:
 
       - name: 上传构建报告
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: build-reports
           path: android/app/build/reports/**

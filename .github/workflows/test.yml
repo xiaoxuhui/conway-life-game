@@ -59,7 +59,7 @@ jobs:
         run: npm run test:browser
       - name: Upload browser report
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/
