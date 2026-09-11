@@ -132,7 +132,7 @@ jobs:
         working-directory: apk
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          mv app-debug.apk "eml-calculator-android-${VERSION}-debug.apk"
+          mv app-debug.apk "conway-life-game-android-${VERSION}-debug.apk"
           ls -l
 
       - name: 创建 / 更新 Release
@@ -141,10 +141,13 @@ jobs:
           files: apk/*.apk
           generate_release_notes: true
           body: |
-            EML 计算台安卓版（debug 签名）。
+            康威生命游戏安卓版（debug 签名）。
 
             **安装前请在系统设置中允许「安装未知来源应用」。**
             鸿蒙 4.x 及安卓 7.0 以上设备可直接安装 APK。
 
-            网页端单文件版本见仓库 `dist/eml-workbench.html`。
+            在线网页版：<https://xiaoxuhui.github.io/conway-life-game/>
+
+            安卓版把网页端的「导出」（世界 / 图案库 / 函数库）改由系统下载目录保存，
+            与网页端功能等价（WebView 不支持浏览器下载）。应用完全离线，不申请任何权限。
           append_body: false
