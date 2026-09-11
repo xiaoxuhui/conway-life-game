@@ -8,6 +8,7 @@ const path = require("node:path");
 const projectRoot = path.resolve(__dirname, "..");
 const html = fs.readFileSync(path.join(projectRoot, "index.html"), "utf8");
 const appSource = fs.readFileSync(path.join(projectRoot, "scripts", "app.js"), "utf8");
+const dialogsSource = fs.readFileSync(path.join(projectRoot, "scripts", "dialogs.js"), "utf8");
 const packageMetadata = JSON.parse(fs.readFileSync(path.join(projectRoot, "package.json"), "utf8"));
 
 test("页面本地资源缓存版本与项目版本一致", () => {
@@ -93,6 +94,7 @@ test("应用资源均为本地文件且不依赖 ES module 服务器行为", () 
     "scripts/speed-control.js",
     "scripts/logic-parse.js",
     "scripts/logic-expand.js",
+    "scripts/logic-layout.js",
     "scripts/logic-compile.js",
     "scripts/logic-safety.js",
     "scripts/logic-code.js",
@@ -111,6 +113,18 @@ test("自定义图案对话框具备名称、说明、错误反馈和明确删�
   assert.match(html, /id=["']deletePatternButton["']/);
 });
 
+test("我的图案库支持全部保存与全部安全导入", () => {
+  assert.match(html, /id=["']exportPatternsButton["'][^>]*>全部保存</);
+  assert.match(html, /id=["']importPatternsInput["'][^>]*accept=["']application\/json,\.json["']/);
+  assert.match(html, /name=["']patternImportMode["'][^>]*value=["']merge["']/);
+  assert.match(html, /name=["']patternImportMode["'][^>]*value=["']replace["']/);
+  assert.match(html, /id=["']importPatternsError["'][^>]*role=["']alert["']/);
+  assert.match(dialogsSource, /PatternStore\.serializeLibrary/);
+  assert.match(dialogsSource, /PatternStore\.parseLibrary/);
+  assert.match(dialogsSource, /PatternStore\.mergeLibraries/);
+  assert.match(dialogsSource, /conway-life-patterns-/);
+});
+
 test("我的函数库具备保存、载入、编辑和明确删除操作", () => {
   assert.match(html, /id=["']logicFunctionNameInput["'][^>]*maxlength=["']30["']/);
   assert.match(html, /id=["']manageLogicFunctionCode["'][^>]*maxlength=["']200["']/);
@@ -119,6 +133,18 @@ test("我的函数库具备保存、载入、编辑和明确删除操作", () =>
   assert.match(appSource, /LogicCode\.parseExpanded\(expanded\)/);
   assert.match(appSource, /instantiateFunction/);
   assert.match(appSource, /expandFunctions/);
+});
+
+test("我的函数库支持版本化 JSON 导出与安全导入", () => {
+  assert.match(html, /id=["']exportLogicFunctionsButton["']/);
+  assert.match(html, /id=["']importLogicFunctionsInput["'][^>]*accept=["']application\/json,\.json["']/);
+  assert.match(html, /name=["']logicFunctionImportMode["'][^>]*value=["']merge["']/);
+  assert.match(html, /name=["']logicFunctionImportMode["'][^>]*value=["']replace["']/);
+  assert.match(html, /id=["']importLogicFunctionsError["'][^>]*role=["']alert["']/);
+  assert.match(dialogsSource, /FunctionStore\.serializeLibrary/);
+  assert.match(dialogsSource, /FunctionStore\.parseLibrary/);
+  assert.match(dialogsSource, /FunctionStore\.mergeLibraries/);
+  assert.match(dialogsSource, /window\.confirm/);
 });
 
 test("复杂逻辑生成提供非阻塞进度和取消状态", () => {

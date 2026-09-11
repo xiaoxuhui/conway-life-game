@@ -14,6 +14,7 @@
   <script defer src="scripts/speed-control.js?v=0.15.0"></script>
   <script defer src="scripts/logic-parse.js?v=0.15.0"></script>
   <script defer src="scripts/logic-expand.js?v=0.15.0"></script>
+  <script defer src="scripts/logic-layout.js?v=0.15.0"></script>
   <script defer src="scripts/logic-compile.js?v=0.15.0"></script>
   <script defer src="scripts/logic-safety.js?v=0.15.0"></script>
   <script defer src="scripts/logic-code.js?v=0.15.0"></script>
@@ -99,6 +100,9 @@
             <button class="text-button" id="flipPatternButton" type="button" aria-keyshortcuts="F" disabled>⇋ 翻转</button>
             <button class="text-button" id="savePatternButton" type="button" disabled>保存为图案</button>
             <button class="text-button" id="managePatternsButton" type="button" disabled>管理我的图案</button>
+            <button class="text-button" id="exportPatternsButton" type="button" aria-label="全部保存我的图案到文件" disabled>全部保存</button>
+            <button class="text-button" id="importPatternsButton" type="button" aria-label="从文件全部导入我的图案">全部导入</button>
+            <input id="importPatternsInput" type="file" accept="application/json,.json" hidden>
           </div>
         </div>
 
@@ -131,6 +135,11 @@
             <button class="button" id="loadLogicFunctionButton" type="button" disabled>载入</button>
             <button class="text-button" id="saveLogicFunctionButton" type="button" disabled>保存函数</button>
             <button class="text-button" id="manageLogicFunctionsButton" type="button" disabled>管理函数</button>
+          </div>
+          <div class="logic-library-file-actions" aria-label="函数库存盘">
+            <button class="text-button" id="exportLogicFunctionsButton" type="button" disabled>导出函数库</button>
+            <button class="text-button" id="importLogicFunctionsButton" type="button">导入函数库</button>
+            <input id="importLogicFunctionsInput" type="file" accept="application/json,.json" hidden>
           </div>
           <div class="logic-function-inputs" id="logicFunctionInputs" aria-label="函数输入" hidden></div>
           <p class="field-note logic-code-feedback" id="logicCodeFeedback" role="status" aria-live="polite"></p>
@@ -246,6 +255,35 @@
     </form>
   </dialog>
 
+  <dialog class="app-dialog" id="importPatternsDialog" aria-labelledby="importPatternsTitle">
+    <form id="importPatternsForm">
+      <div class="dialog-header">
+        <div>
+          <p class="section-kicker">IMPORT PATTERN LIBRARY</p>
+          <h2 id="importPatternsTitle">全部导入“我的图案”</h2>
+        </div>
+        <button class="dialog-close" id="closeImportPatternsButton" type="button" aria-label="关闭">×</button>
+      </div>
+      <p class="function-code-preview" id="importPatternsSummary">请选择整个图案库 JSON 文件。</p>
+      <fieldset class="import-mode-list">
+        <legend>导入方式</legend>
+        <label>
+          <input type="radio" name="patternImportMode" value="merge" checked>
+          <span><b>安全合并</b><small>保留当前图案；重名或重复 ID 的导入项会跳过。</small></span>
+        </label>
+        <label>
+          <input type="radio" name="patternImportMode" value="replace">
+          <span><b>整体替换</b><small>删除当前“我的图案”并恢复为文件内容，执行前会再次确认。</small></span>
+        </label>
+      </fieldset>
+      <p class="dialog-error" id="importPatternsError" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button class="button" id="cancelImportPatternsButton" type="button">取消</button>
+        <button class="button button-primary" id="confirmImportPatternsButton" type="submit" disabled>全部导入</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog class="app-dialog" id="saveLogicFunctionDialog" aria-labelledby="saveLogicFunctionTitle">
     <form id="saveLogicFunctionForm" novalidate>
       <div class="dialog-header">
@@ -300,6 +338,35 @@
           <button class="button" id="cancelManageLogicFunctionsButton" type="button">关闭</button>
           <button class="button button-primary" type="submit">保存修改</button>
         </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="app-dialog" id="importLogicFunctionsDialog" aria-labelledby="importLogicFunctionsTitle">
+    <form id="importLogicFunctionsForm">
+      <div class="dialog-header">
+        <div>
+          <p class="section-kicker">IMPORT FUNCTION LIBRARY</p>
+          <h2 id="importLogicFunctionsTitle">导入“我的函数”</h2>
+        </div>
+        <button class="dialog-close" id="closeImportLogicFunctionsButton" type="button" aria-label="关闭">×</button>
+      </div>
+      <p class="function-code-preview" id="importLogicFunctionsSummary">请选择函数库 JSON 文件。</p>
+      <fieldset class="import-mode-list">
+        <legend>导入方式</legend>
+        <label>
+          <input type="radio" name="logicFunctionImportMode" value="merge" checked>
+          <span><b>安全合并</b><small>保留当前函数；重名或重复 ID 的导入项会跳过。</small></span>
+        </label>
+        <label>
+          <input type="radio" name="logicFunctionImportMode" value="replace">
+          <span><b>整体替换</b><small>删除当前函数库并恢复为文件内容，执行前会再次确认。</small></span>
+        </label>
+      </fieldset>
+      <p class="dialog-error" id="importLogicFunctionsError" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button class="button" id="cancelImportLogicFunctionsButton" type="button">取消</button>
+        <button class="button button-primary" id="confirmImportLogicFunctionsButton" type="submit" disabled>导入</button>
       </div>
     </form>
   </dialog>

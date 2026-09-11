@@ -78,8 +78,8 @@
       updatePresetDescription();
     }
 
-    function commitPatternLibrary(nextLibrary) {
-      if (state.storage.patternStorageBlocked) {
+    function commitPatternLibrary(nextLibrary, options = {}) {
+      if (state.storage.patternStorageBlocked && !options.allowRecovery) {
         throw new PatternStore.PatternLibraryError(
           "STORAGE_BLOCKED",
           "原有本地图案库已损坏。为防止覆盖原数据，本页面已停止写入。",
@@ -87,7 +87,88 @@
       }
       const saved = PatternStore.saveLibrary(window.localStorage, nextLibrary);
       state.storage.patternLibrary = saved;
+      if (options.allowRecovery) state.storage.patternStorageBlocked = false;
       return saved;
+    }
+
+    function exportPatternLibrary() {
+      try {
+        const raw = PatternStore.serializeLibrary(state.storage.patternLibrary, { pretty: true });
+        const date = new Date().toISOString().slice(0, 10);
+        const blob = new Blob([raw], { type: "application/json;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `conway-life-patterns-${date}.json`;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+        showToast(`已全部保存 ${state.storage.patternLibrary.patterns.length} 个自定义图案`);
+      } catch (error) {
+        showToast(error.message || "图案库保存失败", { duration: 7000 });
+      }
+    }
+
+    async function openPatternImport(file) {
+      if (!file) return;
+      state.dialogs.patternImportDraft = null;
+      elements.importPatternsForm.reset();
+      elements.confirmImportPatterns.disabled = true;
+      elements.importPatternsSummary.textContent = `正在读取：${file.name}`;
+      setDialogError(elements.importPatternsError);
+      try {
+        if (file.size > PatternStore.MAX_LIBRARY_BYTES) {
+          throw new PatternStore.PatternLibraryError("LIBRARY_SIZE_LIMIT", "图案库文件超过 4 MB 大小上限");
+        }
+        const library = PatternStore.parseLibrary(await file.text());
+        state.dialogs.patternImportDraft = library;
+        elements.importPatternsSummary.textContent = `${file.name} · ${library.patterns.length} 个自定义图案 · 格式 v${library.version}`;
+        elements.confirmImportPatterns.disabled = false;
+      } catch (error) {
+        elements.importPatternsSummary.textContent = `无法导入：${file.name}`;
+        setDialogError(elements.importPatternsError, error.message || "图案库文件无效");
+      }
+      openDialog(elements.importPatternsDialog);
+      window.setTimeout(() => elements.importPatternsDialog.querySelector("input:checked")?.focus(), 0);
+    }
+
+    function closePatternImport() {
+      state.dialogs.patternImportDraft = null;
+      closeDialog(elements.importPatternsDialog);
+    }
+
+    function importPatternLibrary(event) {
+      event.preventDefault();
+      const imported = state.dialogs.patternImportDraft;
+      if (!imported) return;
+      const mode = elements.importPatternsForm.elements.patternImportMode.value;
+      const currentCount = state.storage.patternLibrary.patterns.length;
+      if (mode === "replace" && currentCount > 0 && !window.confirm(
+        `这会删除当前 ${currentCount} 个自定义图案，并替换为文件中的 ${imported.patterns.length} 个图案。是否继续？`,
+      )) return;
+
+      try {
+        let message;
+        let preferredValue = elements.presetSelect.value;
+        if (mode === "replace") {
+          commitPatternLibrary(imported, { allowRecovery: true });
+          preferredValue = imported.patterns[0] ? `custom:${imported.patterns[0].id}` : "";
+          message = `已整体恢复 ${imported.patterns.length} 个自定义图案`;
+        } else {
+          const result = PatternStore.mergeLibraries(state.storage.patternLibrary, imported);
+          if (result.addedCount > 0) commitPatternLibrary(result.library);
+          message = `已导入 ${result.addedCount} 个自定义图案`;
+          if (result.skippedCount > 0) message += `，跳过 ${result.skippedCount} 个冲突项`;
+        }
+        state.dialogs.placement = null;
+        rebuildPatternOptions(preferredValue);
+        closePatternImport();
+        render();
+        showToast(message, { duration: 7000 });
+      } catch (error) {
+        setDialogError(elements.importPatternsError, error.message || "图案库导入失败");
+      }
     }
 
     function suggestedPatternName() {
@@ -355,6 +436,7 @@
       elements.logicFunctionSelect.disabled = !hasFunctions;
       elements.loadLogicFunction.disabled = !hasFunctions;
       elements.manageLogicFunctions.disabled = !hasFunctions;
+      elements.exportLogicFunctions.disabled = !hasFunctions;
       elements.saveLogicFunction.disabled = !elements.logicCodeInput.value.trim();
     }
 
@@ -412,8 +494,8 @@
       return `我的函数 ${index}`;
     }
 
-    function commitLogicFunctionLibrary(nextLibrary) {
-      if (state.storage.logicFunctionStorageBlocked) {
+    function commitLogicFunctionLibrary(nextLibrary, options = {}) {
+      if (state.storage.logicFunctionStorageBlocked && !options.allowRecovery) {
         throw new FunctionStore.LogicFunctionLibraryError(
           "STORAGE_BLOCKED",
           "原有本地函数库已损坏。为防止覆盖原数据，本页面已停止写入。",
@@ -421,7 +503,84 @@
       }
       const saved = FunctionStore.saveLibrary(window.localStorage, nextLibrary);
       state.storage.logicFunctionLibrary = saved;
+      if (options.allowRecovery) state.storage.logicFunctionStorageBlocked = false;
       return saved;
+    }
+
+    function exportLogicFunctionLibrary() {
+      try {
+        const raw = FunctionStore.serializeLibrary(state.storage.logicFunctionLibrary, { pretty: true });
+        const date = new Date().toISOString().slice(0, 10);
+        const blob = new Blob([raw], { type: "application/json;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `conway-life-functions-${date}.json`;
+        document.body.append(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+        showToast(`已导出 ${state.storage.logicFunctionLibrary.functions.length} 个函数`);
+      } catch (error) {
+        showToast(error.message || "函数库导出失败", { duration: 7000 });
+      }
+    }
+
+    async function openLogicFunctionImport(file) {
+      if (!file) return;
+      state.dialogs.logicFunctionImportDraft = null;
+      elements.importLogicFunctionsForm.reset();
+      elements.confirmImportLogicFunctions.disabled = true;
+      elements.importLogicFunctionsSummary.textContent = `正在读取：${file.name}`;
+      setDialogError(elements.importLogicFunctionsError);
+      try {
+        if (file.size > FunctionStore.MAX_LIBRARY_BYTES) {
+          throw new FunctionStore.LogicFunctionLibraryError("LIBRARY_SIZE_LIMIT", "函数库文件超过大小上限");
+        }
+        const library = FunctionStore.parseLibrary(await file.text());
+        state.dialogs.logicFunctionImportDraft = library;
+        elements.importLogicFunctionsSummary.textContent = `${file.name} · ${library.functions.length} 个函数 · 格式 v${library.version}`;
+        elements.confirmImportLogicFunctions.disabled = false;
+      } catch (error) {
+        elements.importLogicFunctionsSummary.textContent = `无法导入：${file.name}`;
+        setDialogError(elements.importLogicFunctionsError, error.message || "函数库文件无效");
+      }
+      openDialog(elements.importLogicFunctionsDialog);
+      window.setTimeout(() => elements.importLogicFunctionsDialog.querySelector("input:checked")?.focus(), 0);
+    }
+
+    function closeLogicFunctionImport() {
+      state.dialogs.logicFunctionImportDraft = null;
+      closeDialog(elements.importLogicFunctionsDialog);
+    }
+
+    function importLogicFunctionLibrary(event) {
+      event.preventDefault();
+      const imported = state.dialogs.logicFunctionImportDraft;
+      if (!imported) return;
+      const mode = elements.importLogicFunctionsForm.elements.logicFunctionImportMode.value;
+      const currentCount = state.storage.logicFunctionLibrary.functions.length;
+      if (mode === "replace" && currentCount > 0 && !window.confirm(
+        `这会删除当前 ${currentCount} 个函数，并替换为文件中的 ${imported.functions.length} 个函数。是否继续？`,
+      )) return;
+
+      try {
+        let message;
+        if (mode === "replace") {
+          commitLogicFunctionLibrary(imported, { allowRecovery: true });
+          message = `已用文件恢复 ${imported.functions.length} 个函数`;
+        } else {
+          const result = FunctionStore.mergeLibraries(state.storage.logicFunctionLibrary, imported);
+          if (result.addedCount > 0) commitLogicFunctionLibrary(result.library);
+          message = `已导入 ${result.addedCount} 个函数`;
+          if (result.skippedCount > 0) message += `，跳过 ${result.skippedCount} 个冲突项`;
+        }
+        rebuildLogicFunctionOptions(state.storage.logicFunctionLibrary.functions[0]?.id);
+        closeLogicFunctionImport();
+        showToast(message, { duration: 7000 });
+      } catch (error) {
+        setDialogError(elements.importLogicFunctionsError, error.message || "函数库导入失败");
+      }
     }
 
     function openSaveLogicFunctionDialog() {
@@ -595,6 +754,10 @@
       saveManagedPattern,
       deleteManagedPattern,
       initializePatternLibrary,
+      exportPatternLibrary,
+      openPatternImport,
+      closePatternImport,
+      importPatternLibrary,
       // 函数库
       selectedLogicFunction,
       callableLogicFunctions,
@@ -612,6 +775,10 @@
       openManageLogicFunctionsDialog,
       saveManagedLogicFunction,
       deleteManagedLogicFunction,
+      exportLogicFunctionLibrary,
+      openLogicFunctionImport,
+      closeLogicFunctionImport,
+      importLogicFunctionLibrary,
       initializeLogicFunctionLibrary,
       // 内部共用
       setDialogError,

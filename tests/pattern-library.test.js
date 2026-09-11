@@ -172,3 +172,31 @@ test("图案坐标、声明尺寸和数量上限受到校验", () => {
     (error) => error.code === "LIBRARY_LIMIT",
   );
 });
+
+test("整个图案库可导出为可读 JSON 并重新导入", () => {
+  const second = { ...samplePattern("第二个图案"), id: "custom-second" };
+  const library = Patterns.createLibrary([samplePattern(), second]);
+  const raw = Patterns.serializeLibrary(library, { pretty: true });
+  assert.match(raw, /\n  "version": 1/);
+  assert.deepEqual(Patterns.parseLibrary(raw), library);
+  assert.throws(() => Patterns.parseLibrary(""), /为空/);
+  assert.throws(() => Patterns.parseLibrary("{"), /JSON 已损坏/);
+  assert.throws(
+    () => Patterns.parseLibrary(JSON.stringify({ format: "other", version: 1, patterns: [] })),
+    /格式无效/,
+  );
+});
+
+test("合并整个图案库只新增非冲突图案并报告跳过项", () => {
+  const original = samplePattern("双滑翔机");
+  const current = Patterns.createLibrary([original]);
+  const imported = Patterns.createLibrary([
+    { ...samplePattern(" 双滑翔机 "), id: "custom-conflict" },
+    { ...samplePattern("新图案"), id: "custom-new" },
+  ]);
+  const result = Patterns.mergeLibraries(current, imported);
+  assert.equal(result.addedCount, 1);
+  assert.equal(result.skippedCount, 1);
+  assert.deepEqual(result.skippedNames, ["双滑翔机"]);
+  assert.deepEqual(result.library.patterns.map((pattern) => pattern.name), ["双滑翔机", "新图案"]);
+});

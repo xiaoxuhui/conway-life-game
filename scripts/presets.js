@@ -18,6 +18,12 @@
         signalCells: Object.freeze(definition.logic.signalCells.map((coordinate) => Object.freeze(coordinate))),
         signalDelta: Object.freeze([...definition.logic.signalDelta]),
         terminalCells: Object.freeze(definition.logic.terminalCells.map((coordinate) => Object.freeze(coordinate))),
+        ...(definition.logic.inputSignalCells ? {
+          inputSignalCells: Object.freeze(definition.logic.inputSignalCells.map((coordinate) => Object.freeze(coordinate))),
+        } : {}),
+        ...(definition.logic.reflectorBaseCells ? {
+          reflectorBaseCells: Object.freeze(definition.logic.reflectorBaseCells.map((coordinate) => Object.freeze(coordinate))),
+        } : {}),
       });
     }
     return Object.freeze(preset);
@@ -60,6 +66,58 @@
 
   function blockCells(row, column) {
     return [[row, column], [row, column + 1], [row + 1, column], [row + 1, column + 1]];
+  }
+
+  function rleCells(source) {
+    const cells = [];
+    let row = 0;
+    let column = 0;
+    let count = "";
+    for (const character of source.replace(/\s/g, "")) {
+      if (/\d/.test(character)) {
+        count += character;
+        continue;
+      }
+      const amount = Number(count || 1);
+      count = "";
+      if (character === "b") column += amount;
+      if (character === "o") {
+        for (let index = 0; index < amount; index += 1) cells.push([row, column + index]);
+        column += amount;
+      }
+      if (character === "$") {
+        row += amount;
+        column = 0;
+      }
+      if (character === "!") break;
+    }
+    return cells;
+  }
+
+  function wechslerCells(source) {
+    const cells = [];
+    const value = (character) => character >= "a"
+      ? character.charCodeAt(0) - "a".charCodeAt(0) + 10
+      : Number(character);
+    let row = 0;
+    let column = 0;
+    for (let index = 0; index < source.length; index += 1) {
+      const character = source[index];
+      if (character === "z") {
+        row += 5;
+        column = 0;
+      } else if (character === "w") column += 2;
+      else if (character === "x") column += 3;
+      else if (character === "y") column += value(source[index += 1]) + 4;
+      else {
+        const bits = value(character);
+        for (let offset = 0; offset < 5; offset += 1) {
+          if ((bits >> offset) & 1) cells.push([row + offset, column]);
+        }
+        column += 1;
+      }
+    }
+    return cells;
   }
 
   function normalizeLogicPattern(parts, logic) {
@@ -213,6 +271,90 @@
     OR: logicGateKit("OR"),
   });
 
+  // Two p30 guns form a dependent 90-degree reflector. This preset includes one
+  // incident glider; the body recovers while the reflected glider leaves south-west.
+  // Its verified repeat time is 60, so it is intentionally excluded from automatic
+  // routing of the logic system's continuous p30 streams.
+  const REFLECTOR_90_BASE_RLE = "11bo$11bobo$14b2o6b2o$2o12b2o4bo3bo$2o12b2o3bo5bo$11bobo4b2obo3bo8b2o$11bo7bo5bo8b2o$20bo3bo$22b2o$12bo$10b2o$11b2o6$3bobo$3b2o$4bo4$5bo$4b2o$4bobo6$12b2o$11b2o$13bo$23b2o$21bo3bo$12bo7bo5bo8b2o$12bobo4b2obo3bo8b2o$b2o12b2o3bo5bo$b2o12b2o4bo3bo$15b2o6b2o$12bobo$12bo!";
+  const REFLECTOR_90_BASE_CELLS = rleCells(REFLECTOR_90_BASE_RLE)
+    .map(([row, column]) => [row, column + 7]);
+  const REFLECTOR_90_INPUT_CELLS = Object.freeze([
+    [17, 0], [18, 1], [18, 2], [19, 0], [19, 1],
+  ].map((coordinate) => Object.freeze(coordinate)));
+  const REFLECTOR_90 = definePreset({
+    id: "logic-reflector-90-single",
+    name: "逻辑组件 · 90°滑翔机反射器（单脉冲）",
+    description: "真实滑翔机转向组件；可旋转、翻转，恢复间隔 60 代，不用于 p30 连续线路自动布线",
+    width: 45,
+    height: 43,
+    cells: [...REFLECTOR_90_BASE_CELLS, ...REFLECTOR_90_INPUT_CELLS],
+    logic: {
+      gate: "REFLECTOR_90",
+      component: "REFLECTOR_90",
+      inputs: [1],
+      inputOrigins: [[17, 0]],
+      inputSignalCells: REFLECTOR_90_INPUT_CELLS,
+      expected: 1,
+      observeGeneration: 60,
+      signalCells: [[24, 4], [25, 2], [25, 3], [26, 3], [26, 4]],
+      signalDelta: [1, -1],
+      terminalCells: [],
+      reflectorBaseCells: REFLECTOR_90_BASE_CELLS,
+      repeatTime: 60,
+      acceptedSignalPeriod: 60,
+      autoRoute: false,
+    },
+  });
+
+  const P5_BOUNCER_CODE = "y8gs2d5icggkczy5o80haarmg2hy38ozxg88ciaq1ep1x330ccw7nuzc87oa32s4s2bky0256wcczx12521e871";
+  const P5_BOUNCER_BASE_CELLS = wechslerCells(P5_BOUNCER_CODE)
+    .map(([row, column]) => [row, 46 - column]);
+  const P5_BOUNCER_INPUT_CELLS = Object.freeze([
+    [46, 0], [47, 1], [48, 0], [47, 2], [46, 1],
+  ].map((coordinate) => Object.freeze(coordinate)));
+  const P5_BOUNCER_OUTPUT_CELLS = Object.freeze([
+    [37, 46], [38, 44], [38, 46], [39, 45], [39, 46],
+  ].map((coordinate) => Object.freeze(coordinate)));
+  const P5_BOUNCER = definePreset({
+    id: "logic-reflector-p5-stream",
+    name: "逻辑组件 · p5 90°滑翔机反射器",
+    description: "可承载 p30 连续逻辑信号的 90°反射器；恢复时间 25 代，可旋转、翻转",
+    width: 47,
+    height: 49,
+    cells: [...P5_BOUNCER_BASE_CELLS, ...P5_BOUNCER_INPUT_CELLS],
+    logic: {
+      gate: "REFLECTOR_P5_90",
+      component: "REFLECTOR_P5_90",
+      inputs: [1],
+      inputOrigins: [[46, 0]],
+      inputSignalCells: P5_BOUNCER_INPUT_CELLS,
+      expected: 1,
+      observeGeneration: 180,
+      signalCells: P5_BOUNCER_OUTPUT_CELLS,
+      signalDelta: [1, 1],
+      terminalCells: [],
+      reflectorBaseCells: P5_BOUNCER_BASE_CELLS,
+      oscillatorPeriod: 5,
+      repeatTime: 25,
+      acceptedSignalPeriod: 30,
+      autoRoute: true,
+    },
+  });
+
+  const LOGIC_REFLECTOR_KITS = Object.freeze({
+    P5_90: Object.freeze({
+      id: "P5_90",
+      bodyCells: freezeCoordinates(P5_BOUNCER_BASE_CELLS.map(([row, column]) => [row, column - 18])),
+      inputSignalCells: freezeCoordinates(P5_BOUNCER_INPUT_CELLS.map(([row, column]) => [row, column - 18])),
+      outputSignalCells: freezeCoordinates(P5_BOUNCER_OUTPUT_CELLS.map(([row, column]) => [row, column - 18])),
+      outputDelay: 180,
+      signalDelta: Object.freeze([1, 1]),
+      oscillatorPeriod: 5,
+      repeatTime: 25,
+      acceptedSignalPeriod: 30,
+    }),
+  });
+
   const presets = Object.freeze([
     definePreset({
       id: "glider",
@@ -222,6 +364,8 @@
       height: 3,
       cells: [[0, 1], [1, 2], [2, 0], [2, 1], [2, 2]],
     }),
+    REFLECTOR_90,
+    P5_BOUNCER,
     definePreset({
       id: "block",
       name: "方块",
@@ -408,6 +552,10 @@
     return LOGIC_GATE_KITS[String(gate || "").toUpperCase()] || null;
   }
 
+  function getLogicReflectorKit(id = "P5_90") {
+    return LOGIC_REFLECTOR_KITS[String(id || "").toUpperCase()] || null;
+  }
+
   function rotatePattern(pattern) {
     return definePreset({
       ...pattern,
@@ -420,6 +568,12 @@
         signalCells: pattern.logic.signalCells.map(([row, column]) => [column, pattern.height - 1 - row]),
         signalDelta: [pattern.logic.signalDelta[1], -pattern.logic.signalDelta[0]],
         terminalCells: pattern.logic.terminalCells.map(([row, column]) => [column, pattern.height - 1 - row]),
+        ...(pattern.logic.inputSignalCells ? {
+          inputSignalCells: pattern.logic.inputSignalCells.map(([row, column]) => [column, pattern.height - 1 - row]),
+        } : {}),
+        ...(pattern.logic.reflectorBaseCells ? {
+          reflectorBaseCells: pattern.logic.reflectorBaseCells.map(([row, column]) => [column, pattern.height - 1 - row]),
+        } : {}),
       } : undefined,
     });
   }
@@ -434,9 +588,17 @@
         signalCells: pattern.logic.signalCells.map(([row, column]) => [row, pattern.width - 1 - column]),
         signalDelta: [pattern.logic.signalDelta[0], -pattern.logic.signalDelta[1]],
         terminalCells: pattern.logic.terminalCells.map(([row, column]) => [row, pattern.width - 1 - column]),
+        ...(pattern.logic.inputSignalCells ? {
+          inputSignalCells: pattern.logic.inputSignalCells.map(([row, column]) => [row, pattern.width - 1 - column]),
+        } : {}),
+        ...(pattern.logic.reflectorBaseCells ? {
+          reflectorBaseCells: pattern.logic.reflectorBaseCells.map(([row, column]) => [row, pattern.width - 1 - column]),
+        } : {}),
       } : undefined,
     });
   }
 
-  return Object.freeze({ flipPattern, getLogicGateKit, getPreset, presets, rotatePattern });
+  return Object.freeze({
+    flipPattern, getLogicGateKit, getLogicReflectorKit, getPreset, presets, rotatePattern,
+  });
 });

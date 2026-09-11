@@ -234,6 +234,60 @@
     return new TextEncoder().encode(value).byteLength;
   }
 
+  function parseLibrary(raw) {
+    if (typeof raw !== "string" || !raw.trim()) fail("INVALID_IMPORT", "图案库文件为空");
+    if (encodedSize(raw) > MAX_LIBRARY_BYTES) fail("LIBRARY_SIZE_LIMIT", "图案库文件超过 4 MB 大小上限");
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      fail("CORRUPT_LIBRARY", "图案库 JSON 已损坏");
+    }
+    if (!data || data.format !== LIBRARY_FORMAT) fail("CORRUPT_LIBRARY", "图案库格式无效");
+    if (data.version !== LIBRARY_VERSION) fail("UNSUPPORTED_VERSION", "图案库版本不受支持");
+    try {
+      return createLibrary(data.patterns);
+    } catch (error) {
+      if (error instanceof PatternLibraryError) fail("CORRUPT_LIBRARY", `图案库数据无效：${error.message}`);
+      throw error;
+    }
+  }
+
+  function serializeLibrary(library, options = {}) {
+    const validated = createLibrary(library?.patterns || []);
+    const raw = JSON.stringify(validated, null, options.pretty ? 2 : 0);
+    if (encodedSize(raw) > MAX_LIBRARY_BYTES) fail("LIBRARY_SIZE_LIMIT", "自定义图案库已达到 4 MB 大小上限");
+    return raw;
+  }
+
+  function mergeLibraries(currentLibrary, importedLibrary) {
+    const current = createLibrary(currentLibrary?.patterns || []);
+    const imported = createLibrary(importedLibrary?.patterns || []);
+    const patterns = [...current.patterns];
+    const ids = new Set(patterns.map((pattern) => pattern.id));
+    const names = new Set(patterns.map((pattern) => normalizeName(pattern.name)));
+    const skippedNames = [];
+    let addedCount = 0;
+
+    for (const pattern of imported.patterns) {
+      if (ids.has(pattern.id) || names.has(normalizeName(pattern.name)) || patterns.length >= MAX_PATTERNS) {
+        skippedNames.push(pattern.name);
+        continue;
+      }
+      patterns.push(pattern);
+      ids.add(pattern.id);
+      names.add(normalizeName(pattern.name));
+      addedCount += 1;
+    }
+
+    return {
+      library: createLibrary(patterns),
+      addedCount,
+      skippedCount: skippedNames.length,
+      skippedNames,
+    };
+  }
+
   function loadLibrary(storage = globalThis.localStorage) {
     if (!storage || typeof storage.getItem !== "function") fail("STORAGE_UNAVAILABLE", "浏览器本地存储不可用");
     let raw;
@@ -243,19 +297,11 @@
       fail("STORAGE_READ_FAILED", "无法读取浏览器本地存储");
     }
     if (raw === null) return createLibrary();
-    let data;
     try {
-      data = JSON.parse(raw);
-    } catch {
-      fail("CORRUPT_LIBRARY", "本地图案库数据已损坏，请勿覆盖原数据");
-    }
-    if (!data || data.format !== LIBRARY_FORMAT) fail("CORRUPT_LIBRARY", "本地图案库格式无效");
-    if (data.version !== LIBRARY_VERSION) fail("UNSUPPORTED_VERSION", "本地图案库版本不受支持");
-    try {
-      return createLibrary(data.patterns);
+      return parseLibrary(raw);
     } catch (error) {
-      if (error instanceof PatternLibraryError) {
-        fail("CORRUPT_LIBRARY", `本地图案库数据无效：${error.message}`);
+      if (error instanceof PatternLibraryError && error.code === "CORRUPT_LIBRARY") {
+        fail("CORRUPT_LIBRARY", `本地${error.message}，请勿覆盖原数据`);
       }
       throw error;
     }
@@ -264,10 +310,7 @@
   function saveLibrary(storage = globalThis.localStorage, library) {
     if (!storage || typeof storage.setItem !== "function") fail("STORAGE_UNAVAILABLE", "浏览器本地存储不可用");
     const validated = createLibrary(library?.patterns || []);
-    const raw = JSON.stringify(validated);
-    if (encodedSize(raw) > MAX_LIBRARY_BYTES) {
-      fail("LIBRARY_SIZE_LIMIT", "自定义图案库已达到 4 MB 大小上限");
-    }
+    const raw = serializeLibrary(validated);
     try {
       storage.setItem(STORAGE_KEY, raw);
     } catch {
@@ -291,9 +334,12 @@
     createPatternFromWorld,
     deletePattern,
     loadLibrary,
+    mergeLibraries,
     normalizeName,
     normalizeWorld,
+    parseLibrary,
     saveLibrary,
+    serializeLibrary,
     updatePattern,
     validatePattern,
   });

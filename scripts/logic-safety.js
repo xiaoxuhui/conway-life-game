@@ -29,7 +29,7 @@
     }
     const references = candidate.gunGroups.map((group, groupIndex) => {
       const initial = new Set(group.referenceCells.map(([row, column]) => `${row},${column}`));
-      if (!usePhaseCache) return { phases: null, current: initial };
+      if (!usePhaseCache || group.phaseCache === false) return { phases: null, current: initial };
       let evolving = initial;
       const phases = [];
       for (let phase = 0; phase < 30; phase += 1) {

@@ -36,6 +36,9 @@
     loadLogicFunction: document.querySelector("#loadLogicFunctionButton"),
     saveLogicFunction: document.querySelector("#saveLogicFunctionButton"),
     manageLogicFunctions: document.querySelector("#manageLogicFunctionsButton"),
+    exportLogicFunctions: document.querySelector("#exportLogicFunctionsButton"),
+    importLogicFunctions: document.querySelector("#importLogicFunctionsButton"),
+    importLogicFunctionsInput: document.querySelector("#importLogicFunctionsInput"),
     saveLogicFunctionDialog: document.querySelector("#saveLogicFunctionDialog"),
     saveLogicFunctionForm: document.querySelector("#saveLogicFunctionForm"),
     logicFunctionName: document.querySelector("#logicFunctionNameInput"),
@@ -53,11 +56,28 @@
     closeManageLogicFunctions: document.querySelector("#closeManageLogicFunctionsButton"),
     cancelManageLogicFunctions: document.querySelector("#cancelManageLogicFunctionsButton"),
     deleteLogicFunction: document.querySelector("#deleteLogicFunctionButton"),
+    importLogicFunctionsDialog: document.querySelector("#importLogicFunctionsDialog"),
+    importLogicFunctionsForm: document.querySelector("#importLogicFunctionsForm"),
+    importLogicFunctionsSummary: document.querySelector("#importLogicFunctionsSummary"),
+    importLogicFunctionsError: document.querySelector("#importLogicFunctionsError"),
+    confirmImportLogicFunctions: document.querySelector("#confirmImportLogicFunctionsButton"),
+    closeImportLogicFunctions: document.querySelector("#closeImportLogicFunctionsButton"),
+    cancelImportLogicFunctions: document.querySelector("#cancelImportLogicFunctionsButton"),
     managePatternDescription: document.querySelector("#managePatternDescriptionInput"),
     managePatternError: document.querySelector("#managePatternError"),
     managePatternMeta: document.querySelector("#managePatternMeta"),
     managePatternName: document.querySelector("#managePatternNameInput"),
     managePatterns: document.querySelector("#managePatternsButton"),
+    exportPatterns: document.querySelector("#exportPatternsButton"),
+    importPatterns: document.querySelector("#importPatternsButton"),
+    importPatternsInput: document.querySelector("#importPatternsInput"),
+    importPatternsDialog: document.querySelector("#importPatternsDialog"),
+    importPatternsForm: document.querySelector("#importPatternsForm"),
+    importPatternsSummary: document.querySelector("#importPatternsSummary"),
+    importPatternsError: document.querySelector("#importPatternsError"),
+    confirmImportPatterns: document.querySelector("#confirmImportPatternsButton"),
+    closeImportPatterns: document.querySelector("#closeImportPatternsButton"),
+    cancelImportPatterns: document.querySelector("#cancelImportPatternsButton"),
     managePatternsDialog: document.querySelector("#managePatternsDialog"),
     managePatternsForm: document.querySelector("#managePatternsForm"),
     managePatternSelect: document.querySelector("#managePatternSelect"),
@@ -130,7 +150,9 @@
       logicGenerationController: null,
       functionDeleteArmed: false,
       functionDeleteArmTimer: null,
+      logicFunctionImportDraft: null,
       duplicatePatternId: null,
+      patternImportDraft: null,
       deleteArmed: false,
       deleteArmTimer: null,
       placement: null,
@@ -230,6 +252,7 @@
     elements.export.disabled = alive === 0;
     elements.savePattern.disabled = alive === 0;
     elements.managePatterns.disabled = state.storage.patternLibrary.patterns.length === 0;
+    elements.exportPatterns.disabled = state.storage.patternLibrary.patterns.length === 0;
     elements.loadPreset.textContent = state.dialogs.placement ? "完成" : "放置";
     elements.loadPreset.setAttribute("aria-pressed", String(Boolean(state.dialogs.placement)));
     elements.rotatePattern.disabled = !state.dialogs.placement;
@@ -470,6 +493,19 @@
 
   function logicGenerationProgress(controller, progress) {
     if (state.dialogs.logicGenerationController !== controller || controller.signal.aborted) return;
+    if (progress.routeStage === "reflected") {
+      const edge = progress.reflectedEdgePath
+        ? `连接 ${progress.reflectedEdgePath}（${formatNumber((progress.edgeIndex || 0) + 1)} / ${formatNumber(progress.edgeCount || 1)}）`
+        : "同轴连接";
+      const generation = Number.isFinite(progress.generation)
+        ? `，第 ${formatNumber(progress.generation)} / ${formatNumber(progress.horizon)} 代`
+        : "";
+      setLogicCodeFeedback(
+        `正常线路均未通过，正在验证${edge}的双反射后备${generation}…页面仍可操作。`,
+        "progress",
+      );
+      return;
+    }
     const layout = `布局 ${Number(progress.layoutVariant || 0) + 1}`;
     const channel = `通道 ${formatNumber(progress.branchPulseSpacing || 20)}×p30`;
     if (progress.phase === "routing") {
@@ -507,7 +543,7 @@
       const expanded = LogicCode.expandFunctions(elements.logicCodeInput.value, Dialog.callableLogicFunctions());
       const command = LogicCode.parseExpanded(expanded);
       const pattern = await LogicCode.composePatternAsync(
-        command, Presets.getPreset, Presets.getLogicGateKit,
+        command, Presets.getPreset, Presets.getLogicGateKit, Presets.getLogicReflectorKit,
         {
           signal: controller.signal,
           onProgress: (progress) => logicGenerationProgress(controller, progress),
@@ -940,6 +976,15 @@
   elements.deleteLogicFunction.addEventListener("click", Dialog.deleteManagedLogicFunction);
   elements.closeManageLogicFunctions.addEventListener("click", () => closeDialog(elements.manageLogicFunctionsDialog));
   elements.cancelManageLogicFunctions.addEventListener("click", () => closeDialog(elements.manageLogicFunctionsDialog));
+  elements.exportLogicFunctions.addEventListener("click", Dialog.exportLogicFunctionLibrary);
+  elements.importLogicFunctions.addEventListener("click", () => elements.importLogicFunctionsInput.click());
+  elements.importLogicFunctionsInput.addEventListener("change", async () => {
+    await Dialog.openLogicFunctionImport(elements.importLogicFunctionsInput.files?.[0]);
+    elements.importLogicFunctionsInput.value = "";
+  });
+  elements.importLogicFunctionsForm.addEventListener("submit", Dialog.importLogicFunctionLibrary);
+  elements.closeImportLogicFunctions.addEventListener("click", Dialog.closeLogicFunctionImport);
+  elements.cancelImportLogicFunctions.addEventListener("click", Dialog.closeLogicFunctionImport);
   elements.rotatePattern.addEventListener("click", () => transformPlacement(Presets.rotatePattern));
   elements.flipPattern.addEventListener("click", () => transformPlacement(Presets.flipPattern));
   elements.savePattern.addEventListener("click", Dialog.openSavePatternDialog);
@@ -956,17 +1001,30 @@
   elements.deletePattern.addEventListener("click", Dialog.deleteManagedPattern);
   elements.closeManagePatterns.addEventListener("click", () => closeDialog(elements.managePatternsDialog));
   elements.cancelManagePatterns.addEventListener("click", () => closeDialog(elements.managePatternsDialog));
+  elements.exportPatterns.addEventListener("click", Dialog.exportPatternLibrary);
+  elements.importPatterns.addEventListener("click", () => elements.importPatternsInput.click());
+  elements.importPatternsInput.addEventListener("change", async () => {
+    await Dialog.openPatternImport(elements.importPatternsInput.files?.[0]);
+    elements.importPatternsInput.value = "";
+  });
+  elements.importPatternsForm.addEventListener("submit", Dialog.importPatternLibrary);
+  elements.closeImportPatterns.addEventListener("click", Dialog.closePatternImport);
+  elements.cancelImportPatterns.addEventListener("click", Dialog.closePatternImport);
   for (const dialog of [
     elements.savePatternDialog,
     elements.managePatternsDialog,
+    elements.importPatternsDialog,
     elements.saveLogicFunctionDialog,
     elements.manageLogicFunctionsDialog,
+    elements.importLogicFunctionsDialog,
   ]) {
     dialog.addEventListener("close", () => {
       if (!elements.savePatternDialog.open
         && !elements.managePatternsDialog.open
+        && !elements.importPatternsDialog.open
         && !elements.saveLogicFunctionDialog.open
-        && !elements.manageLogicFunctionsDialog.open) {
+        && !elements.manageLogicFunctionsDialog.open
+        && !elements.importLogicFunctionsDialog.open) {
         document.body.classList.remove("has-dialog");
       }
     });

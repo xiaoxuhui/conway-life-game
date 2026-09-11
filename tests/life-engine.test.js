@@ -3,7 +3,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const Life = require("../scripts/life-engine.js");
-const { flipPattern, getLogicGateKit, getPreset, presets, rotatePattern } = require("../scripts/presets.js");
+const {
+  flipPattern, getLogicGateKit, getLogicReflectorKit, getPreset, presets, rotatePattern,
+} = require("../scripts/presets.js");
 
 function coordinates(world) {
   return Life.aliveCoordinates(world).map((cell) => cell.join(","));
@@ -426,4 +428,67 @@ test("逻辑门旋转和翻转时同步转换输入原点、信号探针与静�
   ]);
   assert.deepEqual(rotated.logic.inputs, original.logic.inputs);
   assert.equal(rotated.logic.expected, original.logic.expected);
+});
+
+test("90 度滑翔机反射器会转向单脉冲并恢复 p30 主体", () => {
+  const reflector = getPreset("logic-reflector-90-single");
+  assert.ok(reflector, "逻辑组件库应包含 90 度滑翔机反射器");
+  assert.equal(reflector.logic.component, "REFLECTOR_90");
+  assert.equal(reflector.logic.repeatTime, 60);
+  assert.equal(reflector.logic.acceptedSignalPeriod, 60);
+  assert.equal(reflector.logic.autoRoute, false, "p30 连续线路不得自动选用 p60 恢复组件");
+
+  const world = advance(Life.createWorld(reflector.cells), reflector.logic.observeGeneration);
+  assert.ok(
+    reflector.logic.signalCells.every(([row, column]) => Life.isAlive(world, row, column)),
+    "入射滑翔机应在第 60 代变成完整的转向输出滑翔机",
+  );
+  assert.ok(
+    reflector.logic.reflectorBaseCells.every(([row, column]) => Life.isAlive(world, row, column)),
+    "反射器主体应恢复到初始 p30 相位",
+  );
+  assert.equal(
+    Life.countAlive(world),
+    reflector.logic.reflectorBaseCells.length + reflector.logic.signalCells.length,
+    "恢复后的世界除输出滑翔机外只应保留反射器主体",
+  );
+});
+
+test("反射器与基础逻辑门一样支持旋转和翻转放置", () => {
+  const original = getPreset("logic-reflector-90-single");
+  const rotated = rotatePattern(original);
+  const flipped = flipPattern(original);
+
+  assert.deepEqual(
+    rotated.logic.signalCells,
+    original.logic.signalCells.map(([row, column]) => [column, original.height - 1 - row]),
+  );
+  assert.deepEqual(rotated.logic.signalDelta, [-1, -1]);
+  assert.deepEqual(
+    flipped.logic.reflectorBaseCells,
+    original.logic.reflectorBaseCells.map(([row, column]) => [row, original.width - 1 - column]),
+  );
+});
+
+test("p5 反射器可连续转向四枚间隔 30 代的逻辑信号", () => {
+  const preset = getPreset("logic-reflector-p5-stream");
+  const kit = getLogicReflectorKit("P5_90");
+  assert.ok(preset);
+  assert.equal(preset.logic.oscillatorPeriod, 5);
+  assert.equal(preset.logic.repeatTime, 25);
+  assert.equal(preset.logic.acceptedSignalPeriod, 30);
+  assert.equal(preset.logic.autoRoute, true);
+
+  const streams = [
+    [[46, -18], [47, -17], [48, -18], [47, -16], [46, -17]],
+    [[53, -25], [54, -25], [55, -26], [54, -24], [55, -24]],
+    [[61, -33], [61, -32], [62, -32], [62, -31], [63, -33]],
+    [[68, -40], [69, -40], [70, -41], [69, -39], [70, -39]],
+  ];
+  const world = advance(Life.createWorld([...kit.bodyCells, ...streams.flat()]), 420);
+  const bodyKeys = new Set(kit.bodyCells.map((cell) => cell.join(",")));
+  const alive = Life.aliveCoordinates(world);
+  assert.ok(kit.bodyCells.every(([row, column]) => Life.isAlive(world, row, column)));
+  assert.equal(alive.filter((cell) => !bodyKeys.has(cell.join(","))).length, 20);
+  assert.equal(Life.countAlive(world), kit.bodyCells.length + 20);
 });

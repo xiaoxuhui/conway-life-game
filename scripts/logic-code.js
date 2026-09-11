@@ -11,7 +11,10 @@
   "use strict";
 
   const { LogicCodeError } = LogicParse;
-  const { compileCircuit, normalizeCircuit, orientSouthEast } = LogicCompile;
+  const {
+    collectNestedEdges, compileAxialPairCandidates, compileCircuit, normalizeCircuit,
+    orientSouthEast,
+  } = LogicCompile;
   const { abortIfRequested, defaultYieldControl, validateGunSafety, validateGunSafetyAsync } = LogicSafety;
 
   function assembledPattern(command, circuit, normalized, safety, routing) {
@@ -23,6 +26,7 @@
       height: normalized.height,
       cells: Object.freeze(normalized.cells.map((coordinate) => Object.freeze(coordinate))),
       connectionCount: normalized.connections.length,
+      gateAnchors: Object.freeze(normalized.gateAnchors.map(Object.freeze)),
       gunSafety: Object.freeze({ verifiedThrough: safety.horizon }),
       routing: Object.freeze({ ...routing }),
       connections: Object.freeze(normalized.connections),
@@ -60,10 +64,66 @@
     return usesChannelLayout ? orientSouthEast(circuit) : circuit;
   }
 
-  function composePattern(command, resolvePreset, resolveGateKit) {
+  function axialRouting(routeSet, routeStage, testedCount, reflectorCount) {
+    return {
+      mode: "axial",
+      routeStage,
+      reflectorCount,
+      directGeometryAttempts: routeSet.directGeometryAttempts,
+      directCandidateCount: routeSet.direct.length,
+      directCandidatesTested: routeStage === "direct" ? testedCount : routeSet.direct.length,
+      reflectedCandidatesTested: routeStage === "reflected" ? testedCount : 0,
+    };
+  }
+
+  const REFLECTOR_ROUTE_VARIANTS = 1;
+
+  function largeReflectedRouting(
+    layoutVariant, routePadding, branchPulseSpacing, edge, normalCandidatesTested,
+    reflectedCandidatesTested,
+  ) {
+    return {
+      layoutVariant, routePadding, branchPulseSpacing,
+      routeStage: "reflected",
+      reflectorCount: 2,
+      reflectedEdgePath: edge.path,
+      normalCandidatesTested,
+      reflectedCandidatesTested,
+    };
+  }
+
+  function composePattern(command, resolvePreset, resolveGateKit, resolveReflectorKit) {
     if (!command.steps || command.steps.length <= 1) return resolvePreset(command.presetId);
     if (!command.tree || typeof resolveGateKit !== "function") {
       throw new LogicCodeError("当前环境缺少真实级联门体");
+    }
+    if (typeof resolveReflectorKit === "function") {
+      const routeSet = compileAxialPairCandidates(
+        command.tree, resolveGateKit, resolveReflectorKit,
+      );
+      if (routeSet) {
+        for (let index = 0; index < routeSet.direct.length; index += 1) {
+          const axial = routeSet.direct[index];
+          const normalizedAxial = normalizeCircuit(axial);
+          const axialSafety = validateGunSafety(normalizedAxial);
+          if (axialSafety.safe) return assembledPattern(
+            command, axial, normalizedAxial, axialSafety,
+            axialRouting(routeSet, "direct", index + 1, 0),
+          );
+        }
+        for (let index = 0; index < routeSet.reflected.length; index += 1) {
+          const axial = routeSet.reflected[index];
+          const normalizedAxial = normalizeCircuit(axial);
+          const axialSafety = validateGunSafety(normalizedAxial);
+          if (axialSafety.safe) return assembledPattern(
+            command, axial, normalizedAxial, axialSafety,
+            axialRouting(routeSet, "reflected", index + 1, 2),
+          );
+        }
+        if (routeSet.direct.length + routeSet.reflected.length > 0) {
+          throw new LogicCodeError("同轴直连与反射线路均未通过完整安全验证");
+        }
+      }
     }
     let circuit;
     let normalized;
@@ -85,21 +145,129 @@
       if (safety?.safe) break;
     }
     if (!safety?.safe) {
+      const edges = typeof resolveReflectorKit === "function"
+        ? collectNestedEdges(command.tree)
+        : [];
+      let reflectedCandidatesTested = 0;
+      const layoutVariant = layoutVariantCandidates(command)[0];
+      const branchPulseSpacing = branchSpacingCandidates(command)[0];
+      const routePadding = Math.max(960, routePaddingCandidates(command).at(-1));
+      for (const edge of edges) {
+        for (let reflectorRouteVariant = 0;
+          reflectorRouteVariant < REFLECTOR_ROUTE_VARIANTS;
+          reflectorRouteVariant += 1) {
+          try {
+            circuit = correctRootOutputDirection(command, compileCircuit(
+              command.tree, resolveGateKit, routePadding, layoutVariant, branchPulseSpacing, 0,
+              {
+                reflectedEdgePath: edge.path,
+                reflectorRouteVariant,
+                resolveReflectorKit,
+              },
+            ), branchPulseSpacing);
+          } catch (error) {
+            if (error instanceof LogicCodeError && /双反射几何候选/.test(error.message)) continue;
+            throw error;
+          }
+          reflectedCandidatesTested += 1;
+          normalized = normalizeCircuit(circuit);
+          safety = validateGunSafety(normalized);
+          routing = largeReflectedRouting(
+            layoutVariant, routePadding, branchPulseSpacing, edge,
+            layoutVariantCandidates(command).length
+              * branchSpacingCandidates(command).length
+              * routePaddingCandidates(command).length,
+            reflectedCandidatesTested,
+          );
+          if (safety.safe) break;
+        }
+        if (safety?.safe) break;
+      }
+      if (safety?.safe) return assembledPattern(command, circuit, normalized, safety, routing);
       const attemptCount = layoutVariantCandidates(command).length
         * branchSpacingCandidates(command).length
         * routePaddingCandidates(command).length;
       throw new LogicCodeError(
-        `已尝试 ${attemptCount} 种布局与间距组合，仍无法找到不会撞击滑翔机枪的安全线路`,
+        `已尝试 ${attemptCount} 种正常布局与 ${reflectedCandidatesTested} 种单边反射线路，仍无法找到不会撞击滑翔机枪的安全线路`,
       );
     }
     return assembledPattern(command, circuit, normalized, safety, routing);
   }
 
-  async function composePatternAsync(command, resolvePreset, resolveGateKit, options = {}) {
+  async function composePatternAsync(
+    command, resolvePreset, resolveGateKit, resolveReflectorKitOrOptions, maybeOptions = {},
+  ) {
+    const resolveReflectorKit = typeof resolveReflectorKitOrOptions === "function"
+      ? resolveReflectorKitOrOptions
+      : null;
+    const options = resolveReflectorKit
+      ? maybeOptions
+      : (resolveReflectorKitOrOptions || {});
     abortIfRequested(options.signal);
     if (!command.steps || command.steps.length <= 1) return resolvePreset(command.presetId);
     if (!command.tree || typeof resolveGateKit !== "function") {
       throw new LogicCodeError("当前环境缺少真实级联门体");
+    }
+    if (resolveReflectorKit) {
+      const routeSet = compileAxialPairCandidates(
+        command.tree, resolveGateKit, resolveReflectorKit,
+      );
+      if (routeSet) {
+        options.onProgress?.({
+          phase: "routing", layoutMode: "axial", routeStage: "direct",
+          geometryAttempts: routeSet.directGeometryAttempts,
+          candidateCount: routeSet.direct.length, reflectorCount: 0,
+        });
+        await (options.yieldControl || defaultYieldControl)();
+        abortIfRequested(options.signal);
+        for (let index = 0; index < routeSet.direct.length; index += 1) {
+          const axial = routeSet.direct[index];
+          const normalizedAxial = normalizeCircuit(axial);
+          const axialSafety = await validateGunSafetyAsync(normalizedAxial, {
+            ...options,
+            onProgress: (progress) => options.onProgress?.({
+              ...progress, phase: "safety", layoutMode: "axial",
+              routeStage: "direct", candidateIndex: index, reflectorCount: 0,
+            }),
+          });
+          if (axialSafety.safe) return assembledPattern(
+            command, axial, normalizedAxial, axialSafety,
+            axialRouting(routeSet, "direct", index + 1, 0),
+          );
+          options.onProgress?.({
+            phase: "rejected", layoutMode: "axial", routeStage: "direct",
+            candidateIndex: index, reflectorCount: 0,
+          });
+        }
+        options.onProgress?.({
+          phase: "routing", layoutMode: "axial", routeStage: "reflected",
+          candidateCount: routeSet.reflected.length, reflectorCount: 2,
+        });
+        await (options.yieldControl || defaultYieldControl)();
+        abortIfRequested(options.signal);
+        for (let index = 0; index < routeSet.reflected.length; index += 1) {
+          const axial = routeSet.reflected[index];
+          const normalizedAxial = normalizeCircuit(axial);
+          const axialSafety = await validateGunSafetyAsync(normalizedAxial, {
+            ...options,
+            onProgress: (progress) => options.onProgress?.({
+              ...progress, phase: "safety", layoutMode: "axial",
+              routeStage: "reflected", candidateIndex: index, reflectorCount: 2,
+            }),
+          });
+          if (axialSafety.safe) return assembledPattern(
+            command, axial, normalizedAxial, axialSafety,
+            axialRouting(routeSet, "reflected", index + 1, 2),
+          );
+          options.onProgress?.({
+            phase: "rejected", layoutMode: "axial", routeStage: "reflected",
+            candidateIndex: index, reflectorCount: 2,
+          });
+        }
+        if (routeSet.direct.length + routeSet.reflected.length > 0) {
+          throw new LogicCodeError("同轴直连与反射线路均未通过完整安全验证");
+        }
+      }
     }
     let circuit;
     let normalized;
@@ -147,8 +315,67 @@
       if (safety?.safe) break;
     }
     if (!safety?.safe) {
+      const edges = resolveReflectorKit ? collectNestedEdges(command.tree) : [];
+      let reflectedCandidatesTested = 0;
+      const layoutVariant = layoutVariants[0];
+      const branchPulseSpacing = branchSpacings[0];
+      const routePadding = Math.max(960, routePaddings.at(-1));
+      for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex += 1) {
+        const edge = edges[edgeIndex];
+        for (let reflectorRouteVariant = 0;
+          reflectorRouteVariant < REFLECTOR_ROUTE_VARIANTS;
+          reflectorRouteVariant += 1) {
+          abortIfRequested(options.signal);
+          options.onProgress?.({
+            phase: "routing", routeStage: "reflected",
+            reflectedEdgePath: edge.path, edgeIndex, edgeCount: edges.length,
+            reflectorRouteVariant, reflectorCount: 2,
+          });
+          await (options.yieldControl || defaultYieldControl)();
+          abortIfRequested(options.signal);
+          try {
+            circuit = correctRootOutputDirection(command, compileCircuit(
+              command.tree, resolveGateKit, routePadding, layoutVariant, branchPulseSpacing, 0,
+              {
+                reflectedEdgePath: edge.path,
+                reflectorRouteVariant,
+                resolveReflectorKit,
+              },
+            ), branchPulseSpacing);
+          } catch (error) {
+            if (error instanceof LogicCodeError && /双反射几何候选/.test(error.message)) continue;
+            throw error;
+          }
+          reflectedCandidatesTested += 1;
+          normalized = normalizeCircuit(circuit);
+          await (options.yieldControl || defaultYieldControl)();
+          abortIfRequested(options.signal);
+          safety = await validateGunSafetyAsync(normalized, {
+            ...options,
+            onProgress: (progress) => options.onProgress?.({
+              ...progress, phase: "safety", routeStage: "reflected",
+              reflectedEdgePath: edge.path, edgeIndex, edgeCount: edges.length,
+              reflectorRouteVariant, reflectorCount: 2,
+            }),
+          });
+          routing = largeReflectedRouting(
+            layoutVariant, routePadding, branchPulseSpacing, edge,
+            attemptIndex, reflectedCandidatesTested,
+          );
+          if (!safety.safe) options.onProgress?.({
+            phase: "rejected", routeStage: "reflected",
+            reflectedEdgePath: edge.path, edgeIndex, edgeCount: edges.length,
+            reflectorRouteVariant, reflectorCount: 2,
+            generation: safety.generation, groupIndex: safety.groupIndex,
+            horizon: safety.horizon,
+          });
+          if (safety.safe) break;
+        }
+        if (safety?.safe) break;
+      }
+      if (safety?.safe) return assembledPattern(command, circuit, normalized, safety, routing);
       throw new LogicCodeError(
-        `已尝试 ${attemptIndex} 种布局与间距组合，仍无法找到不会撞击滑翔机枪的安全线路`,
+        `已尝试 ${attemptIndex} 种正常布局与 ${reflectedCandidatesTested} 种单边反射线路，仍无法找到不会撞击滑翔机枪的安全线路`,
       );
     }
     return assembledPattern(command, circuit, normalized, safety, routing);

@@ -95,3 +95,30 @@ test("v1 函数库会把末尾赋值迁移成 v2 参数默认值", () => {
     { name: "A", defaultValue: 1 }, { name: "B", defaultValue: 0 },
   ]);
 });
+
+test("函数库可导出为可读 JSON 并重新导入", () => {
+  const library = Functions.createLibrary([sample("XOR")]);
+  const raw = Functions.serializeLibrary(library, { pretty: true });
+  assert.match(raw, /\n  "version": 2/);
+  assert.deepEqual(Functions.parseLibrary(raw), library);
+  assert.throws(() => Functions.parseLibrary(""), /为空/);
+  assert.throws(() => Functions.parseLibrary("{"), /JSON 已损坏/);
+  assert.throws(
+    () => Functions.parseLibrary(JSON.stringify({ format: "other", version: 2, functions: [] })),
+    /格式无效/,
+  );
+});
+
+test("合并导入只新增不冲突函数并报告跳过项", () => {
+  const original = sample("XOR");
+  const current = Functions.createLibrary([original]);
+  const imported = Functions.createLibrary([
+    sample(" xor "),
+    sample("NOR", "NOT(OR(A,B))"),
+  ]);
+  const result = Functions.mergeLibraries(current, imported);
+  assert.equal(result.addedCount, 1);
+  assert.equal(result.skippedCount, 1);
+  assert.deepEqual(result.skippedNames, ["xor"]);
+  assert.deepEqual(result.library.functions.map((item) => item.name), ["XOR", "NOR"]);
+});

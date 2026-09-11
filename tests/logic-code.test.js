@@ -39,6 +39,49 @@ test("电路相位预演同步推进输出探针与终端元数据", () => {
   assert.equal(shifted.connections[0].alignGeneration, 12);
 });
 
+test("电路 D4 变形同步传递端口、方向、枪体和连接元数据", () => {
+  const source = {
+    cells: [[1, 2]], inputOrigins: [[3, 4]], signalCells: [[5, 6]],
+    signalDelta: [1, -1], terminalCells: [[7, 8]], gateAnchors: [[9, 10]],
+    gunGroups: [{ zoneCells: [[11, 12]], referenceCells: [[13, 14]] }],
+    connections: [{ cells: [[15, 16]] }],
+  };
+  const expected = {
+    I: [1, 2], R90: [2, -1], R180: [-1, -2], R270: [-2, 1],
+    FH: [1, -2], T: [2, 1], FV: [-1, 2], AT: [-2, -1],
+  };
+
+  for (const [transform, cell] of Object.entries(expected)) {
+    const result = LogicCompile.transformCircuit(source, transform);
+    assert.deepEqual(result.cells[0], cell, transform);
+    assert.equal(result.inputOrigins.length, 1, transform);
+    assert.equal(result.gunGroups[0].zoneCells.length, 1, transform);
+    assert.equal(result.connections[0].cells.length, 1, transform);
+    assert.equal(result.gateAnchors.length, 1, transform);
+  }
+  assert.deepEqual(LogicCompile.transformCircuit(source, "R90").signalDelta, [-1, -1]);
+  assert.throws(() => LogicCompile.transformCircuit(source, "UNKNOWN"), /变形/);
+});
+
+test("嵌套逻辑门可选择变形与相位并在连接元数据中保留设置", () => {
+  const command = LogicCode.parse("NOT(NOT(1))");
+  const transformed = LogicCompile.compileCircuit(
+    command.tree, Presets.getLogicGateKit, 240, 0, 20, 0,
+    { nestedTransform: () => ({ name: "T", phase: 0 }) },
+  );
+
+  assert.equal(transformed.connections[0].transform, "T");
+  assert.equal(transformed.connections[0].transformPhase, 0);
+  assert.equal(transformed.gateAnchors.length, 2);
+  assert.throws(
+    () => LogicCompile.compileCircuit(
+      command.tree, Presets.getLogicGateKit, 240, 0, 20, 0,
+      { nestedTransform: () => ({ name: "R90", phase: 4 }) },
+    ),
+    /0 到 3/,
+  );
+});
+
 test("英文与符号 NOT 表达式映射到对应内置结构", () => {
   assert.deepEqual(LogicCode.parse("NOT 0"), {
     gate: "NOT", inputs: [0], expected: 1, presetId: "logic-not-0", expression: "NOT 0",
@@ -238,6 +281,239 @@ test("NOT(AND(1,1)) 的 AND 输出滑翔机进入 NOT 并将输出抵消为 0", 
   );
 });
 
+test("AX01：AND 与后继 NOT 同轴放置并由双反射器真实连接", () => {
+  for (const [left, right] of [[0, 0], [1, 1]]) {
+    const command = LogicCode.parse(`NOT(AND(${left},${right}))`);
+    const pattern = LogicCode.composePattern(
+      command, Presets.getPreset, Presets.getLogicGateKit, Presets.getLogicReflectorKit,
+    );
+    const [connection] = pattern.connections;
+
+    assert.deepEqual(pattern.routing, {
+      mode: "axial",
+      routeStage: "reflected",
+      reflectorCount: 2,
+      directGeometryAttempts: 2048,
+      directCandidateCount: 0,
+      directCandidatesTested: 0,
+      reflectedCandidatesTested: 1,
+    });
+    assert.equal(new Set(pattern.gateAnchors.map(([row]) => row)).size, 1);
+    assert.ok(pattern.gateAnchors[1][1] < pattern.gateAnchors[0][1]);
+    assert.equal(connection.routeMode, "double-reflector");
+    assert.equal(connection.reflectors.length, 2);
+
+    let world = Life.createWorld(pattern.cells);
+    let connected = null;
+    let output = null;
+    for (let generation = 0; generation <= pattern.logic.observeGeneration; generation += 1) {
+      if (generation === connection.alignGeneration) {
+        connected = Number(connection.cells.every(
+          ([row, column]) => Life.isAlive(world, row, column),
+        ));
+      }
+      if (generation === pattern.logic.observeGeneration) {
+        output = Number(pattern.logic.signalCells.every(
+          ([row, column]) => Life.isAlive(world, row, column),
+        ));
+      }
+      if (generation < pattern.logic.observeGeneration) world = Life.nextGeneration(world);
+    }
+    assert.equal(connected, Number(Boolean(left && right)));
+    assert.equal(output, Number(!(left && right)));
+    assert.ok(pattern.gunSafety.verifiedThrough > pattern.logic.observeGeneration);
+  }
+});
+
+test("AX01 异步生成保留同轴布局、进度和完整安全验证", async () => {
+  const phases = [];
+  const pattern = await LogicCode.composePatternAsync(
+    LogicCode.parse("NOT(AND(1,1))"),
+    Presets.getPreset,
+    Presets.getLogicGateKit,
+    Presets.getLogicReflectorKit,
+    {
+      sliceBudgetMs: 0,
+      yieldControl: async () => {},
+      onProgress: (progress) => phases.push(progress),
+    },
+  );
+
+  assert.equal(pattern.routing.routeStage, "reflected");
+  assert.equal(pattern.routing.directGeometryAttempts, 2048);
+  const directIndex = phases.findIndex(
+    ({ phase, routeStage }) => phase === "routing" && routeStage === "direct",
+  );
+  const reflectedIndex = phases.findIndex(
+    ({ phase, routeStage }) => phase === "routing" && routeStage === "reflected",
+  );
+  assert.ok(directIndex >= 0, "必须先报告正常直连搜索");
+  assert.ok(reflectedIndex > directIndex, "反射搜索必须晚于正常直连搜索");
+  assert.equal(phases[directIndex].reflectorCount, 0);
+  assert.equal(phases[directIndex].geometryAttempts, 2048);
+  assert.ok(phases.some(
+    ({ phase, routeStage }) => phase === "safety" && routeStage === "reflected",
+  ));
+});
+
+test("AX06：任一反射器被移除都会切断同轴 AND→NOT 真信号", () => {
+  const command = LogicCode.parse("NOT(AND(1,1))");
+  const routes = LogicCompile.compileAxialPairCandidates(
+    command.tree, Presets.getLogicGateKit, Presets.getLogicReflectorKit,
+  );
+  assert.equal(routes.direct.length, 0);
+  assert.equal(routes.directGeometryAttempts, 2048);
+  const circuit = routes.reflected[0];
+  const reflectorGroups = circuit.gunGroups.slice(-2);
+
+  function connectionValue(removedGroups) {
+    const removed = new Set(removedGroups.flatMap(({ zoneCells }) => (
+      zoneCells.map((cell) => cell.join(","))
+    )));
+    let world = Life.createWorld(circuit.cells.filter((cell) => !removed.has(cell.join(","))));
+    for (let generation = 0; generation < circuit.connections[0].alignGeneration; generation += 1) {
+      world = Life.nextGeneration(world);
+    }
+    return Number(circuit.connections[0].cells.every(
+      ([row, column]) => Life.isAlive(world, row, column),
+    ));
+  }
+
+  assert.equal(connectionValue([]), 1);
+  assert.equal(connectionValue([reflectorGroups[0]]), 0);
+  assert.equal(connectionValue([reflectorGroups[1]]), 0);
+  assert.equal(connectionValue(reflectorGroups), 0);
+});
+
+test("AX06：存在安全直连时立即采用且不测试反射候选", () => {
+  const glider = [[0, 1], [1, 2], [2, 0], [2, 1], [2, 2]];
+  let target = new Set(glider.map((cell) => cell.join(",")));
+  for (let generation = 0; generation < 120; generation += 1) {
+    target = Life.nextCellSet(target);
+  }
+  const targetCells = [...target].map((key) => {
+    const [row, column] = key.split(",").map(Number);
+    return [row, column - 100];
+  });
+  const emptyKit = (gate) => ({
+    gate,
+    bodyCells: [], bodyGunGroups: [], inputFalseCells: [], inputTrueCells: [],
+    inputGunCells: [], terminalCells: [], signalDelta: [1, 1],
+  });
+  const kits = {
+    AND: {
+      ...emptyKit("AND"), inputOrigins: [[0, 0], [0, 0]],
+      inputSignalGeneration: 120, inputSignalCells: targetCells,
+      observeGeneration: 0, signalCells: glider,
+    },
+    NOT: {
+      ...emptyKit("NOT"), inputOrigins: [[0, 0]],
+      inputSignalGeneration: 120, inputSignalCells: targetCells,
+      observeGeneration: 20, signalCells: glider,
+    },
+  };
+  const command = LogicCode.parse("NOT(AND(1,1))");
+  const pattern = LogicCode.composePattern(
+    command,
+    () => null,
+    (gate) => kits[gate],
+    Presets.getLogicReflectorKit,
+  );
+
+  assert.equal(pattern.routing.routeStage, "direct");
+  assert.equal(pattern.routing.reflectorCount, 0);
+  assert.ok(pattern.routing.directCandidateCount > 0);
+  assert.equal(pattern.routing.directCandidatesTested, 1);
+  assert.equal(pattern.routing.reflectedCandidatesTested, 0);
+  assert.equal(pattern.connections[0].routeMode, "direct");
+});
+
+test("AX07：XOR 的每条嵌套边都能生成双反射后备候选", () => {
+  const command = LogicCode.parse(
+    "OR(AND(A,NOT(B)),AND(NOT(A),B)),A=1,B=0",
+  );
+  const edges = LogicCompile.collectNestedEdges(command.tree);
+
+  assert.deepEqual(edges, [
+    { path: "root.0.1", from: "NOT", to: "AND", portIndex: 1 },
+    { path: "root.0", from: "AND", to: "OR", portIndex: 0 },
+    { path: "root.1.0", from: "NOT", to: "AND", portIndex: 0 },
+    { path: "root.1", from: "AND", to: "OR", portIndex: 1 },
+  ]);
+
+  for (const edge of edges) {
+    const circuit = LogicCompile.compileCircuit(
+      command.tree, Presets.getLogicGateKit, 960, 0, 20, 0,
+      {
+        reflectedEdgePath: edge.path,
+        reflectorRouteVariant: 0,
+        resolveReflectorKit: Presets.getLogicReflectorKit,
+      },
+    );
+    const reflected = circuit.connections.find(({ edgePath }) => edgePath === edge.path);
+    assert.equal(reflected.routeMode, "double-reflector", edge.path);
+    assert.equal(reflected.reflectors.length, 2, edge.path);
+    assert.ok(LogicCompile.transformNames.includes(reflected.reflectedChildTransform));
+    assert.equal(
+      circuit.connections.filter(({ routeMode }) => routeMode === "double-reflector").length,
+      1,
+      "每个第一阶段候选只能改造一条连接边",
+    );
+    assert.equal(
+      circuit.gunGroups.filter(({ phaseCache }) => phaseCache === false).length,
+      2,
+      "两座反射器都必须进入完整安全验证",
+    );
+    const normalized = LogicCompile.normalizeCircuit(circuit);
+    const normalizedConnection = normalized.connections.find(
+      ({ edgePath }) => edgePath === edge.path,
+    );
+    for (const { anchor: [row, column] } of normalizedConnection.reflectors) {
+      assert.ok(row >= 0 && row < normalized.height, edge.path);
+      assert.ok(column >= 0 && column < normalized.width, edge.path);
+    }
+  }
+});
+
+test("AX08/AX09：大型结构仅在正常候选全失败后逐边反射并失败关闭", async () => {
+  const command = LogicCode.parse("NOT(NOT(AND(1,1)))");
+  const progress = [];
+  const unsafeGateKit = (gate) => {
+    const kit = Presets.getLogicGateKit(gate);
+    return {
+      ...kit,
+      bodyGunGroups: [...kit.bodyGunGroups, [[5000, 5000]]],
+    };
+  };
+
+  await assert.rejects(
+    LogicCode.composePatternAsync(
+      command, Presets.getPreset, unsafeGateKit, Presets.getLogicReflectorKit,
+      {
+        sliceBudgetMs: 0,
+        yieldControl: async () => {},
+        onProgress: (value) => progress.push(value),
+      },
+    ),
+    /正常布局与 2 种单边反射线路/,
+  );
+
+  const firstReflected = progress.findIndex(({ routeStage }) => routeStage === "reflected");
+  const lastNormal = progress.reduce(
+    (last, item, index) => (item.routeStage ? last : index), -1,
+  );
+  assert.ok(firstReflected > lastNormal, "全部正常布局测试结束后才能进入反射阶段");
+  assert.deepEqual(
+    [...new Set(progress
+      .filter(({ phase, routeStage }) => phase === "routing" && routeStage === "reflected")
+      .map(({ reflectedEdgePath }) => reflectedEdgePath))],
+    ["root.0.0", "root.0"],
+  );
+  assert.ok(progress
+    .filter(({ phase, routeStage }) => phase === "rejected" && routeStage === "reflected")
+    .every(({ reflectorCount }) => reflectorCount === 2));
+});
+
 test("两条连续门到门线路都由实际滑翔机逐级传递", () => {
   const command = LogicCode.parse("NOT(NOT(AND(1,1)))");
   const pattern = LogicCode.composePattern(command, Presets.getPreset, Presets.getLogicGateKit);
@@ -306,11 +582,16 @@ test("变量异或的两条分支均由实际滑翔机接入 OR", () => {
       const source = `OR(AND(A,NOT(B)),AND(NOT(A),B)),A=${left},B=${right}`;
       const command = LogicCode.parse(source);
       const pattern = LogicCode.composePattern(
-        command, Presets.getPreset, Presets.getLogicGateKit,
+        command, Presets.getPreset, Presets.getLogicGateKit, Presets.getLogicReflectorKit,
       );
       const expected = Number(left !== right);
       assert.equal(command.expected, expected, `${source} 的解析真值错误`);
       assert.equal(pattern.connectionCount, 4, `${source} 必须包含四条门到门线路`);
+      assert.equal(
+        pattern.connections.filter(({ routeMode }) => routeMode === "double-reflector").length,
+        0,
+        `${source} 的正常布局成功时不得提前加入反射器`,
+      );
 
       let world = Life.createWorld(pattern.cells);
       for (let generation = 0; generation <= pattern.logic.observeGeneration; generation += 1) {
