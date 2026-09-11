@@ -1,7 +1,12 @@
 * text=auto eol=lf
 
+# Gradle wrapper 的 shell 脚本必须保持 LF，否则 Linux 构建器无法执行
+android/gradlew text eol=lf
+
 *.png binary
 *.jpg binary
 *.jpeg binary
 *.gif binary
 *.zip binary
+*.jar binary
+*.apk binary

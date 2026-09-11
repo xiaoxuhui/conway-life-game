@@ -25,6 +25,8 @@
   },
   "scripts": {
     "serve": "node scripts/serve-static.js",
+    "sync:android": "node scripts/sync-android-assets.mjs",
+    "check:android": "node scripts/sync-android-assets.mjs --check",
     "test": "node --test",
     "test:browser": "playwright test",
     "check": "node --check scripts/life-engine.js && node --check scripts/presets.js && node --check scripts/pattern-library.js && node --check scripts/speed-control.js && node --check scripts/logic-parse.js && node --check scripts/logic-expand.js && node --check scripts/logic-layout.js && node --check scripts/logic-compile.js && node --check scripts/logic-safety.js && node --check scripts/logic-code.js && node --check scripts/logic-function-library.js && node --check scripts/renderer.js && node --check scripts/dialogs.js && node --check scripts/app.js && node --check scripts/serve-static.js && node --check playwright.config.js && node --check e2e/app.smoke.spec.js",
