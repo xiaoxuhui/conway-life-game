@@ -18,7 +18,7 @@ test("核心演化、图案放置和逻辑生成可完成", async ({ page }) => 
   await page.locator("#stepButton").click();
   await expect(page.locator("#generationValue")).toHaveText("1");
 
-  await page.locator("#presetSelect").selectOption("glider");
+  await page.locator("#presetSelect").selectOption("builtin:glider");
   await page.locator("#loadPresetButton").click();
   await expect(page.locator("#statusText")).toHaveText("放置中");
   await page.locator("#lifeCanvas").click({ position: { x: 120, y: 120 } });
