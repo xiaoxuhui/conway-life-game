@@ -65,6 +65,7 @@ GitHub：<https://github.com/xiaoxuhui/conway-life-game>
 - [实施清单](docs/implementation-plan.md)
 - [测试报告](docs/test-report.md)
 - [v0.15.0 重构测试报告](docs/重构版测试报告-v0.15.0.md)
+- [安卓发版核对报告 v0.17.0](docs/安卓发版核对报告-v0.17.0.md)
 - [变更日志](CHANGELOG.md)
 - [贡献指南](CONTRIBUTING.md)
 - [安全策略](SECURITY.md)
