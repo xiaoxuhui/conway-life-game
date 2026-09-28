@@ -26,8 +26,14 @@ const EXPECT = {
   namespace: "com.xiaoxuhui.conway",
   minSdk: 24,
   targetSdk: 34,
-  versionCode: 1,
-  versionName: "0.16.0",
+  /**
+   * 版本号**刻意不在这里写死**。
+   *
+   * 原先这里硬编码 `versionCode` / `versionName`，于是每次发版都要改三处
+   * （`package.json`、`build.gradle.kts`、本文件）—— 同一事实维护多份，必然漂移。
+   * 现在改为：`versionName` 从 `package.json` 读（唯一真源，不可能不一致），
+   * `versionCode` 只校验形态与下限。见下方「应用身份」用例。
+   */
   appName: "康威生命游戏",
   /** MainActivity.kt 所在包路径（对应 java/ 下的目录层级） */
   packageDir: ["com", "xiaoxuhui", "conway"],
@@ -64,8 +70,24 @@ test("应用身份与需求一致（包名/SDK/版本）", async () => {
   assert.match(gradle, new RegExp(`namespace\\s*=\\s*"${escape(EXPECT.namespace)}"`));
   assert.match(gradle, new RegExp(`minSdk\\s*=\\s*${EXPECT.minSdk}`));
   assert.match(gradle, new RegExp(`targetSdk\\s*=\\s*${EXPECT.targetSdk}`));
-  assert.match(gradle, new RegExp(`versionCode\\s*=\\s*${EXPECT.versionCode}`));
-  assert.match(gradle, new RegExp(`versionName\\s*=\\s*"${escape(EXPECT.versionName)}"`));
+
+  // versionName 与 package.json 同线 —— 真源只有一个，写死在测试里就是制造第二份。
+  const { version } = JSON.parse(await read(path.join(ROOT, "package.json")));
+  const versionName = gradle.match(/versionName\s*=\s*"([^"]+)"/)?.[1];
+  assert.equal(
+    versionName,
+    version,
+    `build.gradle.kts 的 versionName（${versionName}）必须与 package.json 的 version（${version}）一致`
+  );
+
+  // versionCode 没有可推导的真源，只校验形态 + 下限。
+  // 下限 2 是固定的历史事实：v0.16.0 是随机签名时代的 versionCode=1，
+  // 自 v0.17.0（首个固定签名版本）起只能递增，永不回落。
+  const versionCode = gradle.match(/versionCode\s*=\s*(\d+)/)?.[1];
+  assert.ok(
+    versionCode !== undefined && Number(versionCode) >= 2,
+    `versionCode 必须是 ≥ 2 的整数（当前 ${versionCode}）—— v0.16.0 之后只能递增`
+  );
 });
 
 /**

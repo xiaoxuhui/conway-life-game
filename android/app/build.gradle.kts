@@ -11,8 +11,8 @@ android {
         applicationId = "com.xiaoxuhui.conway"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.16.0"
+        versionCode = 2
+        versionName = "0.17.0"
 
         // 应用为单语言中文工具，去掉无用资源以减小体积
         resourceConfigurations += listOf("zh", "en")
@@ -29,8 +29,8 @@ android {
      * 这里的 `debug.keystore` 随仓库提交：debug key 的密码在 Android 文档里是公开的
      * （android / androiddebugkey），本身没有保密价值，唯一重要的是**它必须固定不变**。
      * 注意：v0.16.0 已经使用 CI 临时生成的另一把 debug key 发布，无法再找回。
-     * 因此 v0.16.0 → 使用此 keystore 的首个版本需要卸载重装；从该版本起，这个
-     * 文件就是固定的升级基线，绝不能替换。
+     * 因此 v0.16.0 → v0.17.0（使用此 keystore 的**首个**版本）需要用户卸载重装一次；
+     * 从 v0.17.0 起，这个文件就是固定的升级基线，绝不能替换。
      */
     signingConfigs {
         getByName("debug") {

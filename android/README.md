@@ -5,7 +5,7 @@
 
 - 包名：`com.xiaoxuhui.conway`
 - 应用名：康威生命游戏
-- 版本：0.16.0（versionCode 1）
+- 版本：0.17.0（versionCode 2）
 - minSdk 24（Android 7.0）/ targetSdk 34
 - 权限：**无**（完全离线，不申请网络权限）
 
@@ -66,13 +66,20 @@ gradlew.bat assembleDebug      # Windows
 
 | 位置 | 内容 |
 |---|---|
-| `package.json` | `"version": "0.16.0"` |
-| `android/app/build.gradle.kts` | `versionCode`（递增）、`versionName = "0.16.0"` |
-| 根目录 `index.html` | 全部 `<script>` / `<link>` 尾缀 `?v=0.16.0` |
-| `CHANGELOG.md` / `README.md` | 发布日期与下载直链 |
+| `package.json` | `"version"` —— **唯一真源**，其余各处向它对齐 |
+| `android/app/build.gradle.kts` | `versionCode`（**只增不减**）、`versionName` |
+| 根目录 `index.html` | 全部 `<script>` / `<link>` 尾缀 `?v=` |
+| `CHANGELOG.md` / `README.md` | 发布日期与状态行 |
+
+`versionName` 与页面 `?v=` 都有测试守着自动对齐（`tests/android-shell.test.js` 比对 `package.json`，
+`tests/static-app.test.js` 比对页面资源），**不会静默漂移**。唯独 `versionCode` 没有可推导的真源，
+只能在发版时人工确认递增 —— 这是本清单里唯一需要靠人的一项。
 
 其中 `index.html` 的 `?v=` 尾缀是给浏览器端的静态资源去缓存用的，
 忘了同步会出现"页面是新版、JS 是旧版"的组合。改完用 `npm run check:android` 复核。
+
+版本线与 versionCode 的对应：`0.16.0` → versionCode 1（随机签名时代）；
+`0.17.0` → versionCode 2（**首个固定签名版本**，从 v0.16.0 升级需先卸载重装一次）。
 
 ## 说明
 
