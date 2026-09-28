@@ -53,6 +53,28 @@ test("缩放范围有数值安全保护", () => {
   assert.equal(huge.cellSize, Renderer.MAX_CELL_SIZE);
 });
 
+test("主网格线取每 10 格的位置，正负方向与 0 都覆盖", () => {
+  assert.equal(Renderer.GRID_MAJOR_STEP, 10);
+  assert.deepEqual(Renderer.majorGridIndices(-23, 23), [-20, -10, 0, 10, 20]);
+  assert.deepEqual(Renderer.majorGridIndices(0, 0), [0]);
+  assert.deepEqual(Renderer.majorGridIndices(1, 9), []);
+  assert.deepEqual(Renderer.majorGridIndices(10, 30), [10, 20, 30]);
+  for (const index of Renderer.majorGridIndices(-1005, 1005)) {
+    // 注意：-1000 % 10 得到 -0，strictEqual(-0, 0) 会失败，这里用 === 判定
+    assert.ok(index % Renderer.GRID_MAJOR_STEP === 0);
+    assert.ok(index >= -1005 && index <= 1005);
+  }
+});
+
+test("主网格线在完整区间内不重不漏且间隔恒定", () => {
+  const indices = Renderer.majorGridIndices(-100, 100);
+  assert.equal(indices.length, 21);
+  assert.equal(new Set(indices).size, indices.length);
+  for (let i = 1; i < indices.length; i += 1) {
+    assert.equal(indices[i] - indices[i - 1], Renderer.GRID_MAJOR_STEP);
+  }
+});
+
 test("逻辑输出标签在观察前等待，观察后锁存为明确的 0 或 1", () => {
   assert.equal(Renderer.logicOutputLabel({ result: null, observeGeneration: 163 }), "O=? · 第 163 代");
   assert.equal(Renderer.logicOutputLabel({ result: 0, observeGeneration: 163 }), "O=0");

@@ -8,9 +8,21 @@
   const DEFAULT_CELL_SIZE = 16;
   const MIN_CELL_SIZE = 0.0001;
   const MAX_CELL_SIZE = 1024;
+  // 每隔多少个格子画一条更粗的主网格线（X 或 Y 能被它整除的位置）
+  const GRID_MAJOR_STEP = 10;
 
   function clamp(value, minimum, maximum) {
     return Math.min(maximum, Math.max(minimum, value));
+  }
+
+  // 取 [min, max] 区间内落在主网格线上的格子序号（含 0，含负数方向）
+  function majorGridIndices(min, max) {
+    const indices = [];
+    const first = Math.ceil(min / GRID_MAJOR_STEP) * GRID_MAJOR_STEP;
+    for (let index = first; index <= max; index += GRID_MAJOR_STEP) {
+      indices.push(index);
+    }
+    return indices;
   }
 
   function createCamera(overrides = {}) {
@@ -129,6 +141,22 @@
         context.lineTo(Math.round(x) + 0.5, canvas.height);
       }
       for (let row = minRow; row <= maxRow; row += 1) {
+        const y = (row - camera.centerRow) * size + canvas.height / 2;
+        context.moveTo(0, Math.round(y) + 0.5);
+        context.lineTo(canvas.width, Math.round(y) + 0.5);
+      }
+      context.stroke();
+
+      // 主网格线：X 或 Y 能被 GRID_MAJOR_STEP 整除的位置画得更粗，便于按十格计数
+      context.beginPath();
+      context.lineWidth = Math.max(1, ratio * 1.2);
+      context.strokeStyle = latestDisabled ? "rgba(126, 170, 154, 0.34)" : "rgba(126, 170, 154, 0.55)";
+      for (const column of majorGridIndices(minColumn, maxColumn)) {
+        const x = (column - camera.centerColumn) * size + canvas.width / 2;
+        context.moveTo(Math.round(x) + 0.5, 0);
+        context.lineTo(Math.round(x) + 0.5, canvas.height);
+      }
+      for (const row of majorGridIndices(minRow, maxRow)) {
         const y = (row - camera.centerRow) * size + canvas.height / 2;
         context.moveTo(0, Math.round(y) + 0.5);
         context.lineTo(canvas.width, Math.round(y) + 0.5);
@@ -296,10 +324,12 @@
 
   return Object.freeze({
     DEFAULT_CELL_SIZE,
+    GRID_MAJOR_STEP,
     MAX_CELL_SIZE,
     MIN_CELL_SIZE,
     cellAtPoint,
     create,
+    majorGridIndices,
     createCamera,
     fitCamera,
     logicOutputLabel,
