@@ -68,6 +68,36 @@ test("应用身份与需求一致（包名/SDK/版本）", async () => {
   assert.match(gradle, new RegExp(`versionName\\s*=\\s*"${escape(EXPECT.versionName)}"`));
 });
 
+/**
+ * 「无法更新」的直接原因之二：签名不一致。
+ *
+ * AGP 在没配 signingConfig 时会为每台构建机自动生成随机 debug key。
+ * GitHub Actions 每次都是全新 runner；固定此文件后，从新的升级基线开始，
+ * 每次发布的 APK 才会使用同一签名并允许覆盖安装。
+ *
+ * 实证：v0.16.0 的线上 APK 里，签名证书的 notBefore 是 Sep 11 16:32:39 2026，
+ * 与那次 Release 的发布时间只差 19 秒 —— 证书是构建时现场生成的，不是仓库里的固定文件。
+ * v0.16.0 的临时私钥未被保存，无法与此 key 连续；这次只能让用户卸载重装一次。
+ * 之后 keystore 必须入库且被显式引用。
+ */
+test("固定 debug 签名存在且被 gradle 引用（否则新包无法覆盖安装）", async () => {
+  const gradle = await read(path.join(ANDROID, "app", "build.gradle.kts"));
+
+  assert.match(gradle, /signingConfigs\s*\{/, "build.gradle.kts 缺少 signingConfigs 块");
+  assert.match(
+    gradle,
+    /storeFile\s*=\s*file\("debug\.keystore"\)/,
+    "debug 签名没有指向仓库内的 debug.keystore"
+  );
+  assert.match(gradle, /storeType\s*=\s*"PKCS12"/, '缺少 storeType = "PKCS12"');
+  assert.match(gradle, /keyAlias\s*=\s*"androiddebugkey"/);
+
+  assert.ok(
+    existsSync(path.join(ANDROID, "app", "debug.keystore")),
+    "android/app/debug.keystore 缺失 —— 它必须入库，否则 CI 只能用随机签名签发，后续版本无法覆盖更新"
+  );
+});
+
 test("应用显示名正确", async () => {
   const strings = await read(path.join(APP, "res", "values", "strings.xml"));
   assert.match(
