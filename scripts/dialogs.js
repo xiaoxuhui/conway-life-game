@@ -25,6 +25,77 @@
       dialog.showModal();
     }
 
+    // 普通 <a download> 无法确认落盘；删除前必须等文件流成功关闭。
+    async function saveRecordBackup(raw, suggestedName) {
+      if (typeof window.showSaveFilePicker !== "function") {
+        throw new Error("当前浏览器不支持确认文件保存，可先用“全部保存”导出。");
+      }
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [{ description: "JSON 备份", accept: { "application/json": [".json"] } }],
+      });
+      const writable = await handle.createWritable();
+      try {
+        await writable.write(raw);
+        await writable.close();
+      } catch (error) {
+        try { await writable.abort(); } catch { /* 保留原始写入错误。 */ }
+        throw error;
+      }
+    }
+
+    let recordExportBusy = false;
+
+    async function exportAndDeleteRecord(options) {
+      const { item, store, collection, remove, commit, finish, form, dialog, button, errorElement, prefix } = options;
+      if (!item || recordExportBusy) return;
+      recordExportBusy = true;
+      const controls = [...form.querySelectorAll("input, textarea, select, button")];
+      const disabled = controls.map((control) => control.disabled);
+      const label = button.textContent;
+      const preventClose = (event) => event.preventDefault();
+      dialog.addEventListener("cancel", preventClose);
+      form.setAttribute("aria-busy", "true");
+      controls.forEach((control) => { control.disabled = true; });
+      button.textContent = "正在保存…";
+      setDialogError(errorElement);
+      let saved = false;
+      let deleted = false;
+      try {
+        const raw = store.serializeLibrary(store.createLibrary([item]), { pretty: true });
+        const name = item.name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_");
+        const date = new Date().toISOString().slice(0, 10);
+        await saveRecordBackup(raw, `${prefix}-${name}-${date}.json`);
+        saved = true;
+        // 保存窗口期间其它页面可能更新同一库；重读持久化数据以保留这些变化。
+        const library = store.loadLibrary(window.localStorage);
+        const current = library[collection].find((entry) => entry.id === item.id);
+        if (!current || store.serializeLibrary(store.createLibrary([current]), { pretty: true }) !== raw) {
+          throw new Error("所选记录已变化，请重新导出后再删除。");
+        }
+        const next = remove(library, item.id);
+        commit(next);
+        deleted = true;
+        finish(next);
+        showToast(`已导出并删除：${item.name}`);
+      } catch (error) {
+        if (!saved && error.name === "AbortError") {
+          showToast("已取消保存，记录已保留");
+        } else {
+          const message = deleted
+            ? `备份已保存且记录已删除，列表刷新失败：${error.message}`
+            : `${saved ? "备份已保存，" : ""}记录已保留：${error.message || "导出失败"}`;
+          setDialogError(errorElement, message);
+        }
+      } finally {
+        controls.forEach((control, index) => { control.disabled = disabled[index]; });
+        button.textContent = label;
+        form.removeAttribute("aria-busy");
+        dialog.removeEventListener("cancel", preventClose);
+        recordExportBusy = false;
+      }
+    }
+
     // ---- 图案库管理 ----
 
     function selectedPattern() {
@@ -406,6 +477,24 @@
       rebuildPatternOptions();
     }
 
+    function exportAndDeleteManagedPattern() {
+      resetDeleteConfirmation();
+      return exportAndDeleteRecord({
+        item: managedPattern(), store: PatternStore, collection: "patterns",
+        remove: PatternStore.deletePattern, commit: commitPatternLibrary,
+        form: elements.managePatternsForm, dialog: elements.managePatternsDialog,
+        button: elements.exportDeletePattern, errorElement: elements.managePatternError,
+        prefix: "conway-life-pattern",
+        finish(next) {
+          rebuildPatternOptions();
+          resetDeleteConfirmation();
+          render();
+          if (next.patterns.length === 0) closeDialog(elements.managePatternsDialog);
+          else rebuildManageOptions(next.patterns[0].id);
+        },
+      });
+    }
+
     // ---- 函数库管理 ----
 
     function selectedLogicFunction() {
@@ -733,6 +822,23 @@
       rebuildLogicFunctionOptions();
     }
 
+    function exportAndDeleteManagedLogicFunction() {
+      resetFunctionDeleteConfirmation();
+      return exportAndDeleteRecord({
+        item: managedLogicFunction(), store: FunctionStore, collection: "functions",
+        remove: FunctionStore.deleteFunction, commit: commitLogicFunctionLibrary,
+        form: elements.manageLogicFunctionsForm, dialog: elements.manageLogicFunctionsDialog,
+        button: elements.exportDeleteLogicFunction, errorElement: elements.manageLogicFunctionError,
+        prefix: "conway-life-function",
+        finish(next) {
+          rebuildLogicFunctionOptions();
+          resetFunctionDeleteConfirmation();
+          if (next.functions.length === 0) closeDialog(elements.manageLogicFunctionsDialog);
+          else rebuildManageLogicFunctionOptions(next.functions[0].id);
+        },
+      });
+    }
+
     return Object.freeze({
       // 图案库
       selectedPattern,
@@ -753,6 +859,7 @@
       openManagePatternsDialog,
       saveManagedPattern,
       deleteManagedPattern,
+      exportAndDeleteManagedPattern,
       initializePatternLibrary,
       exportPatternLibrary,
       openPatternImport,
@@ -775,6 +882,7 @@
       openManageLogicFunctionsDialog,
       saveManagedLogicFunction,
       deleteManagedLogicFunction,
+      exportAndDeleteManagedLogicFunction,
       exportLogicFunctionLibrary,
       openLogicFunctionImport,
       closeLogicFunctionImport,

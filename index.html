@@ -245,6 +245,8 @@
         <textarea id="managePatternDescriptionInput" maxlength="120" rows="3"></textarea>
       </label>
       <p class="dialog-error" id="managePatternError" role="alert" hidden></p>
+      <p class="record-export-hint" id="exportDeletePatternHint">导出已保存的所选图案，文件保存完成后删除。取消保存则保留；未保存的编辑请先“保存修改”。</p>
+      <button class="button danger-button" id="exportDeletePatternButton" type="button" aria-describedby="exportDeletePatternHint">导出并删除</button>
       <div class="dialog-actions dialog-actions-split">
         <button class="button danger-button" id="deletePatternButton" type="button">删除图案</button>
         <div>
@@ -332,6 +334,8 @@
         <textarea id="manageLogicFunctionCode" maxlength="200" rows="5" spellcheck="false" required></textarea>
       </label>
       <p class="dialog-error" id="manageLogicFunctionError" role="alert" hidden></p>
+      <p class="record-export-hint" id="exportDeleteLogicFunctionHint">导出已保存的所选函数，文件保存完成后删除。取消保存则保留；未保存的编辑请先“保存修改”。</p>
+      <button class="button danger-button" id="exportDeleteLogicFunctionButton" type="button" aria-describedby="exportDeleteLogicFunctionHint">导出并删除</button>
       <div class="dialog-actions dialog-actions-split">
         <button class="button danger-button" id="deleteLogicFunctionButton" type="button">删除函数</button>
         <div>

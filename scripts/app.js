@@ -56,6 +56,7 @@
     closeManageLogicFunctions: document.querySelector("#closeManageLogicFunctionsButton"),
     cancelManageLogicFunctions: document.querySelector("#cancelManageLogicFunctionsButton"),
     deleteLogicFunction: document.querySelector("#deleteLogicFunctionButton"),
+    exportDeleteLogicFunction: document.querySelector("#exportDeleteLogicFunctionButton"),
     importLogicFunctionsDialog: document.querySelector("#importLogicFunctionsDialog"),
     importLogicFunctionsForm: document.querySelector("#importLogicFunctionsForm"),
     importLogicFunctionsSummary: document.querySelector("#importLogicFunctionsSummary"),
@@ -110,6 +111,7 @@
     closeManagePatterns: document.querySelector("#closeManagePatternsButton"),
     closeSavePattern: document.querySelector("#closeSavePatternButton"),
     deletePattern: document.querySelector("#deletePatternButton"),
+    exportDeletePattern: document.querySelector("#exportDeletePatternButton"),
     patternPreview: document.querySelector("#patternPreview"),
   };
 
@@ -974,6 +976,7 @@
   elements.manageLogicFunctionName.addEventListener("input", Dialog.resetFunctionDeleteConfirmation);
   elements.manageLogicFunctionCode.addEventListener("input", Dialog.resetFunctionDeleteConfirmation);
   elements.deleteLogicFunction.addEventListener("click", Dialog.deleteManagedLogicFunction);
+  elements.exportDeleteLogicFunction.addEventListener("click", Dialog.exportAndDeleteManagedLogicFunction);
   elements.closeManageLogicFunctions.addEventListener("click", () => closeDialog(elements.manageLogicFunctionsDialog));
   elements.cancelManageLogicFunctions.addEventListener("click", () => closeDialog(elements.manageLogicFunctionsDialog));
   elements.exportLogicFunctions.addEventListener("click", Dialog.exportLogicFunctionLibrary);
@@ -999,6 +1002,7 @@
   elements.managePatternName.addEventListener("input", Dialog.resetDeleteConfirmation);
   elements.managePatternDescription.addEventListener("input", Dialog.resetDeleteConfirmation);
   elements.deletePattern.addEventListener("click", Dialog.deleteManagedPattern);
+  elements.exportDeletePattern.addEventListener("click", Dialog.exportAndDeleteManagedPattern);
   elements.closeManagePatterns.addEventListener("click", () => closeDialog(elements.managePatternsDialog));
   elements.cancelManagePatterns.addEventListener("click", () => closeDialog(elements.managePatternsDialog));
   elements.exportPatterns.addEventListener("click", Dialog.exportPatternLibrary);
