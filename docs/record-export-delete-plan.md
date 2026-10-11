@@ -1,6 +1,6 @@
 # 逐项导出并删除
 
-- **Status**: VERIFIED
+- **Status**: PENDING
 - **Approved**: 2026-10-11 用户确认继续实现；先保存再删除，不额外确认
 - **Type**: feature
 
@@ -18,6 +18,13 @@
 - **Definition of Done**: `node --test` 相关库测试通过；完整 Playwright 桌面/移动测试通过，验证保存关闭顺序、恢复、取消/失败保留、并发变化保护、清理失败回滚、空库与界面布局。
 - **Files**: index.html、styles/main.css、scripts/app.js、scripts/dialogs.js、tests/static-app.test.js、e2e/bulk-export-delete.spec.js、README.md、docs/requirements.md、docs/technical-design.md、docs/record-export-delete-plan.md。
 - **Approved**: 2026-10-11 用户要求添加主页按钮；按 Skill 规则验收后合并 main、推送、核对并删除本次短分支。
+
+## R3 主页全部导入 `[PENDING]`
+
+- **Objective**: 通过主页配对按钮一次选择函数/图案备份，预览并确认安全合并，不覆盖现有记录。
+- **Definition of Done**: `node --test tests/record-import.test.js tests/static-app.test.js tests/logic-function-library.test.js tests/pattern-library.test.js` 全绿；完整桌面/移动 Playwright 全绿，覆盖双库恢复、单库、重复/冲突、坏文件/超限/取消、写入失败回滚与并发新增；语法、lint、diff 检查通过。
+- **Files**: index.html、styles/main.css、scripts/record-import.js、scripts/dialogs.js、scripts/app.js、package.json、tests/record-import.test.js、tests/static-app.test.js、e2e/bulk-import.spec.js、README.md、docs/requirements.md、docs/technical-design.md、docs/record-export-delete-plan.md。
+- **Approved**: 2026-10-11 用户要求对应的全部导入按钮，验收后按已授权 Skill 流程合并推送主分支并清理本次短分支。
 
 ## R1 验证记录（2026-10-11）
 
