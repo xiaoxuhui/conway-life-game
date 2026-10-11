@@ -1,0 +1,19 @@
+name: Daily repository maintenance
+
+on:
+  schedule:
+    - cron: '18 1 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: daily-repository-maintenance
+  cancel-in-progress: false
+
+jobs:
+  check:
+    uses: xiaoxuhui/game-hub/.github/workflows/repository-watch-reusable.yml@450432e130976320de469fa4dff9c0a1a33381cb
+    with:
+      implementation-sha: 450432e130976320de469fa4dff9c0a1a33381cb
