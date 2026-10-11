@@ -34,6 +34,10 @@
         suggestedName,
         types: [{ description: "JSON 备份", accept: { "application/json": [".json"] } }],
       });
+      await writeBackupFile(handle, raw);
+    }
+
+    async function writeBackupFile(handle, raw) {
       const writable = await handle.createWritable();
       try {
         await writable.write(raw);
@@ -45,6 +49,95 @@
     }
 
     let recordExportBusy = false;
+
+    function updateBulkRecordButton() {
+      elements.exportDeleteAllRecords.disabled = recordExportBusy
+        || state.storage.patternLibrary.patterns.length + state.storage.logicFunctionLibrary.functions.length === 0;
+    }
+
+    async function exportAndDeleteAllRecords() {
+      if (recordExportBusy) return;
+      recordExportBusy = true;
+      updateBulkRecordButton();
+      setDialogError(elements.exportAllRecordsError);
+      const preventClose = (event) => event.preventDefault();
+      elements.exportAllRecordsDialog.addEventListener("cancel", preventClose);
+      let saved = false;
+      let cleared = false;
+      let rollbackFailed = false;
+      try {
+        const storage = window.localStorage;
+        const patterns = PatternStore.loadLibrary(storage);
+        const functions = FunctionStore.loadLibrary(storage);
+        if (patterns.patterns.length + functions.functions.length === 0) {
+          showToast("暂无可导出的自定义记录");
+          return;
+        }
+        const patternRaw = PatternStore.serializeLibrary(patterns, { pretty: true });
+        const functionRaw = FunctionStore.serializeLibrary(functions, { pretty: true });
+        if (typeof window.showDirectoryPicker !== "function") {
+          throw new Error("当前浏览器不支持选择备份目录，可使用原有全部保存功能。");
+        }
+        elements.exportAllRecordsProgress.textContent = "选择备份目录；两份文件保存完成后清空记录。";
+        openDialog(elements.exportAllRecordsDialog);
+        const directory = await window.showDirectoryPicker({ mode: "readwrite" });
+        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        for (const [name, raw] of [
+          [`conway-life-patterns-${stamp}.json`, patternRaw],
+          [`conway-life-functions-${stamp}.json`, functionRaw],
+        ]) {
+          elements.exportAllRecordsProgress.textContent = `正在保存：${name}`;
+          const handle = await directory.getFileHandle(name, { create: true });
+          await writeBackupFile(handle, raw);
+        }
+        saved = true;
+        if (PatternStore.serializeLibrary(PatternStore.loadLibrary(storage), { pretty: true }) !== patternRaw
+          || FunctionStore.serializeLibrary(FunctionStore.loadLibrary(storage), { pretty: true }) !== functionRaw) {
+          throw new Error("保存期间记录已变化，请重新备份后再清空。");
+        }
+        const originalPatternRaw = storage.getItem(PatternStore.STORAGE_KEY);
+        const emptyPatterns = PatternStore.createLibrary();
+        const emptyFunctions = FunctionStore.createLibrary();
+        // setItem 对单个键原子写入；第二次失败时回滚已写入的第一个键。
+        PatternStore.saveLibrary(storage, emptyPatterns);
+        try {
+          FunctionStore.saveLibrary(storage, emptyFunctions);
+        } catch (error) {
+          try {
+            if (originalPatternRaw === null) storage.removeItem(PatternStore.STORAGE_KEY);
+            else storage.setItem(PatternStore.STORAGE_KEY, originalPatternRaw);
+          } catch {
+            rollbackFailed = true;
+            state.storage.patternLibrary = PatternStore.loadLibrary(storage);
+            rebuildPatternOptions();
+            render();
+          }
+          throw error;
+        }
+        state.storage.patternLibrary = emptyPatterns;
+        state.storage.logicFunctionLibrary = emptyFunctions;
+        cleared = true;
+        rebuildPatternOptions();
+        rebuildLogicFunctionOptions();
+        render();
+        showToast(`已保存两份备份并删除 ${patterns.patterns.length} 个图案、${functions.functions.length} 个函数`, { duration: 7000 });
+      } catch (error) {
+        if (!saved && error.name === "AbortError") showToast("已取消保存，全部记录已保留");
+        else {
+          const message = rollbackFailed
+            ? `备份已保存，但清理未完成，请从备份恢复：${error.message}`
+            : cleared
+              ? `备份已保存且记录已清空，列表刷新失败：${error.message}`
+              : `${saved ? "备份已保存，" : ""}全部记录已保留：${error.message || "导出失败"}`;
+          setDialogError(elements.exportAllRecordsError, message);
+        }
+      } finally {
+        if (elements.exportAllRecordsDialog.open) closeDialog(elements.exportAllRecordsDialog);
+        elements.exportAllRecordsDialog.removeEventListener("cancel", preventClose);
+        recordExportBusy = false;
+        updateBulkRecordButton();
+      }
+    }
 
     async function exportAndDeleteRecord(options) {
       const { item, store, collection, remove, commit, finish, form, dialog, button, errorElement, prefix } = options;
@@ -147,6 +240,7 @@
       const hasPreferred = [...elements.presetSelect.options].some((option) => option.value === preferredValue);
       if (hasPreferred) elements.presetSelect.value = preferredValue;
       updatePresetDescription();
+      updateBulkRecordButton();
     }
 
     function commitPatternLibrary(nextLibrary, options = {}) {
@@ -527,6 +621,7 @@
       elements.manageLogicFunctions.disabled = !hasFunctions;
       elements.exportLogicFunctions.disabled = !hasFunctions;
       elements.saveLogicFunction.disabled = !elements.logicCodeInput.value.trim();
+      updateBulkRecordButton();
     }
 
     function rebuildLogicFunctionOptions(preferredId) {
@@ -889,6 +984,7 @@
       importLogicFunctionLibrary,
       initializeLogicFunctionLibrary,
       // 内部共用
+      exportAndDeleteAllRecords,
       setDialogError,
       openDialog,
     });

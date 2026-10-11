@@ -766,6 +766,18 @@ kbd {
   line-height: 1.5;
 }
 
+.record-backup-controls {
+  grid-column: 1 / -1;
+}
+
+.record-backup-controls .field-note,
+#exportAllRecordsProgress {
+  overflow: visible;
+  overflow-wrap: anywhere;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .dialog-actions,
 .dialog-actions > div {
   display: flex;

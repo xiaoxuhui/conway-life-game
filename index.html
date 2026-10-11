@@ -144,6 +144,11 @@
           <div class="logic-function-inputs" id="logicFunctionInputs" aria-label="函数输入" hidden></div>
           <p class="field-note logic-code-feedback" id="logicCodeFeedback" role="status" aria-live="polite"></p>
         </form>
+        <div class="control-group record-backup-controls">
+          <button class="button danger-button" id="exportDeleteAllRecordsButton" type="button" aria-describedby="exportAllRecordsHelp" disabled>全部导出并删除</button>
+          <p class="field-note" id="exportAllRecordsHelp">先将“我的函数”和“我的图案”保存到备份目录，再清空全部自定义记录。</p>
+          <p class="dialog-error" id="exportAllRecordsError" role="alert" hidden></p>
+        </div>
       </section>
 
       <section class="board-section" aria-labelledby="boardTitle">
@@ -219,6 +224,13 @@
         <button class="button danger-button" id="updateExistingPatternButton" type="button" hidden>更新同名图案</button>
         <button class="button button-primary" type="submit">保存</button>
       </div>
+    </form>
+  </dialog>
+
+  <dialog class="app-dialog" id="exportAllRecordsDialog" aria-labelledby="exportAllRecordsTitle">
+    <form aria-busy="true">
+      <h2 id="exportAllRecordsTitle">正在备份全部记录</h2>
+      <p class="field-note" id="exportAllRecordsProgress" role="status" aria-live="polite"></p>
     </form>
   </dialog>
 
