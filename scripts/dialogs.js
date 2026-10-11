@@ -10,7 +10,7 @@
   // app 层辅助函数（showToast/render/stop/closeDialog/replacePlacementPattern/
   // setLogicCodeFeedback/formatNumber），从而避免与 app.js 主控制器深度耦合。
   function create(context) {
-    const { state, elements, Life, PatternStore, FunctionStore, LogicCode, Presets } = context;
+    const { state, elements, Life, PatternStore, FunctionStore, RecordImport, LogicCode, Presets } = context;
     const {
       showToast, render, stop, closeDialog, replacePlacementPattern, setLogicCodeFeedback, formatNumber,
     } = context.helpers;
@@ -49,10 +49,100 @@
     }
 
     let recordExportBusy = false;
+    let allRecordsImportDraft = null;
+    let allRecordsImportReadId = 0;
+
+    function resetAllRecordsImport() {
+      allRecordsImportDraft = null;
+      allRecordsImportReadId += 1;
+      elements.confirmImportAllRecords.disabled = true;
+      updateBulkRecordButton();
+    }
+
+    function closeAllRecordsImport() {
+      resetAllRecordsImport();
+      closeDialog(elements.importAllRecordsDialog);
+      updateBulkRecordButton();
+    }
+
+    function prepareAllRecordsImport(imported) {
+      if ((imported.patterns && state.storage.patternStorageBlocked)
+        || (imported.functions && state.storage.logicFunctionStorageBlocked)) {
+        throw new Error("原有本地库无法读取，为防止覆盖原数据，请先通过单库导入的整体替换恢复。");
+      }
+      return RecordImport.prepare(window.localStorage, imported);
+    }
+
+    async function openAllRecordsImport(files) {
+      if (!files.length || recordExportBusy) return;
+      resetAllRecordsImport();
+      const readId = allRecordsImportReadId;
+      elements.importAllRecordsSummary.textContent = "正在读取并校验所选备份…";
+      setDialogError(elements.importAllRecordsError);
+      openDialog(elements.importAllRecordsDialog);
+      try {
+        const imported = await RecordImport.readFiles(files);
+        if (readId !== allRecordsImportReadId || !elements.importAllRecordsDialog.open) return;
+        const plan = prepareAllRecordsImport(imported);
+        elements.importAllRecordsSummary.textContent = plan.map((entry) => (
+          `${entry.type === "patterns" ? "图案" : "函数"}：文件 ${imported[entry.type][entry.type].length} 项，预计新增 ${entry.addedCount} 项，跳过 ${entry.skippedCount} 项`
+        )).join("\n");
+        allRecordsImportDraft = imported;
+        elements.confirmImportAllRecords.disabled = false;
+      } catch (error) {
+        if (readId !== allRecordsImportReadId || !elements.importAllRecordsDialog.open) return;
+        elements.importAllRecordsSummary.textContent = "无法导入，未写入任何记录。";
+        setDialogError(elements.importAllRecordsError, error.message || "备份文件无效");
+      }
+    }
+
+    function importAllRecords(event) {
+      event.preventDefault();
+      if (!allRecordsImportDraft || recordExportBusy) return;
+      let saved = false;
+      try {
+        const plan = prepareAllRecordsImport(allRecordsImportDraft);
+        RecordImport.commit(window.localStorage, plan);
+        saved = true;
+        for (const entry of plan) {
+          if (entry.type === "patterns") state.storage.patternLibrary = entry.library;
+          else state.storage.logicFunctionLibrary = entry.library;
+        }
+        state.dialogs.placement = null;
+        rebuildPatternOptions();
+        rebuildLogicFunctionOptions(elements.logicFunctionSelect.value);
+        closeAllRecordsImport();
+        render();
+        showToast(`全部导入完成：${plan.map((entry) => (
+          `${entry.type === "patterns" ? "图案" : "函数"}新增 ${entry.addedCount} 项、跳过 ${entry.skippedCount} 项`
+        )).join("；")}`, { duration: 7000 });
+      } catch (error) {
+        if (error.rollbackFailed) {
+          // 磁盘写入和回滚都失败时，不让界面继续显示旧快照。
+          for (const [type, store, blocked] of [
+            ["patterns", PatternStore, "patternStorageBlocked"],
+            ["functions", FunctionStore, "logicFunctionStorageBlocked"],
+          ]) {
+            try {
+              const library = store.loadLibrary(window.localStorage);
+              state.storage[type === "patterns" ? "patternLibrary" : "logicFunctionLibrary"] = library;
+            } catch { state.storage[blocked] = true; }
+          }
+          rebuildPatternOptions();
+          rebuildLogicFunctionOptions();
+          render();
+        }
+        setDialogError(elements.importAllRecordsError, saved
+          ? `导入已保存，但列表刷新失败：${error.message}`
+          : error.message || "导入失败，原有记录未变更");
+      }
+    }
 
     function updateBulkRecordButton() {
       elements.exportDeleteAllRecords.disabled = recordExportBusy
+        || elements.importAllRecordsDialog.open
         || state.storage.patternLibrary.patterns.length + state.storage.logicFunctionLibrary.functions.length === 0;
+      elements.importAllRecords.disabled = recordExportBusy || elements.importAllRecordsDialog.open;
     }
 
     async function exportAndDeleteAllRecords() {
@@ -985,6 +1075,10 @@
       initializeLogicFunctionLibrary,
       // 内部共用
       exportAndDeleteAllRecords,
+      openAllRecordsImport,
+      resetAllRecordsImport,
+      closeAllRecordsImport,
+      importAllRecords,
       setDialogError,
       openDialog,
     });

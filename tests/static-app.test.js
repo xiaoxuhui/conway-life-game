@@ -41,6 +41,13 @@ test("页面包含全部核心控件", () => {
     "exportAllRecordsDialog",
     "exportAllRecordsProgress",
     "exportAllRecordsError",
+    "importAllRecordsButton",
+    "importAllRecordsInput",
+    "importAllRecordsDialog",
+    "importAllRecordsForm",
+    "importAllRecordsSummary",
+    "importAllRecordsError",
+    "confirmImportAllRecordsButton",
     "generationValue",
     "actualSpeedValue",
     "zoomValue",
@@ -60,6 +67,13 @@ test("页面包含全部核心控件", () => {
   ]) {
     assert.match(html, new RegExp(`id=["']${id}["']`), `缺少 #${id}`);
   }
+});
+
+test("主页全部导入使用多选文件并提供独立预览确认", () => {
+  assert.match(html, /id="importAllRecordsInput"[^>]*type="file"[^>]*multiple/);
+  assert.match(html, /id="confirmImportAllRecordsButton"[^>]*type="submit"[^>]*disabled/);
+  assert.ok(html.indexOf("scripts/record-import.js") < html.indexOf("scripts/dialogs.js"));
+  assert.match(appSource, /Dialog\.openAllRecordsImport\(files\)/);
 });
 
 test("演化速度使用可手动输入的数字框并公开有效范围", () => {

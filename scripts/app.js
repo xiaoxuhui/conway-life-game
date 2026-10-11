@@ -26,6 +26,15 @@
     exportAllRecordsDialog: document.querySelector("#exportAllRecordsDialog"),
     exportAllRecordsProgress: document.querySelector("#exportAllRecordsProgress"),
     exportAllRecordsError: document.querySelector("#exportAllRecordsError"),
+    importAllRecords: document.querySelector("#importAllRecordsButton"),
+    importAllRecordsInput: document.querySelector("#importAllRecordsInput"),
+    importAllRecordsDialog: document.querySelector("#importAllRecordsDialog"),
+    importAllRecordsForm: document.querySelector("#importAllRecordsForm"),
+    importAllRecordsSummary: document.querySelector("#importAllRecordsSummary"),
+    importAllRecordsError: document.querySelector("#importAllRecordsError"),
+    confirmImportAllRecords: document.querySelector("#confirmImportAllRecordsButton"),
+    cancelImportAllRecords: document.querySelector("#cancelImportAllRecordsButton"),
+    closeImportAllRecords: document.querySelector("#closeImportAllRecordsButton"),
     fitView: document.querySelector("#fitViewButton"),
     generation: document.querySelector("#generationValue"),
     importButton: document.querySelector("#importButton"),
@@ -179,6 +188,7 @@
     Life,
     PatternStore,
     FunctionStore,
+    RecordImport: window.LifeRecordImport,
     LogicCode,
     Presets,
     helpers: {
@@ -260,7 +270,9 @@
     elements.managePatterns.disabled = state.storage.patternLibrary.patterns.length === 0;
     elements.exportPatterns.disabled = state.storage.patternLibrary.patterns.length === 0;
     elements.exportDeleteAllRecords.disabled = elements.exportAllRecordsDialog.open
+      || elements.importAllRecordsDialog.open
       || state.storage.patternLibrary.patterns.length + state.storage.logicFunctionLibrary.functions.length === 0;
+    elements.importAllRecords.disabled = elements.exportAllRecordsDialog.open || elements.importAllRecordsDialog.open;
     elements.loadPreset.textContent = state.dialogs.placement ? "完成" : "放置";
     elements.loadPreset.setAttribute("aria-pressed", String(Boolean(state.dialogs.placement)));
     elements.rotatePattern.disabled = !state.dialogs.placement;
@@ -611,6 +623,7 @@
   function closeDialog(dialog) {
     if (dialog.open) dialog.close();
     if (!elements.exportAllRecordsDialog.open
+      && !elements.importAllRecordsDialog.open
       && !elements.savePatternDialog.open
       && !elements.managePatternsDialog.open
       && !elements.saveLogicFunctionDialog.open
@@ -961,6 +974,18 @@
 
   elements.run.addEventListener("click", toggleRun);
   elements.exportDeleteAllRecords.addEventListener("click", Dialog.exportAndDeleteAllRecords);
+  elements.importAllRecords.addEventListener("click", () => elements.importAllRecordsInput.click());
+  elements.importAllRecordsInput.addEventListener("change", async () => {
+    const files = [...elements.importAllRecordsInput.files];
+    elements.importAllRecordsInput.value = "";
+    await Dialog.openAllRecordsImport(files);
+  });
+  elements.importAllRecordsForm.addEventListener("submit", Dialog.importAllRecords);
+  elements.cancelImportAllRecords.addEventListener("click", Dialog.closeAllRecordsImport);
+  elements.closeImportAllRecords.addEventListener("click", Dialog.closeAllRecordsImport);
+  elements.importAllRecordsDialog.addEventListener("close", () => {
+    if (!elements.importAllRecordsDialog.open) Dialog.resetAllRecordsImport();
+  });
   elements.step.addEventListener("click", advance);
   elements.clear.addEventListener("click", clearWorld);
   elements.random.addEventListener("click", fillRandom);
@@ -1024,6 +1049,7 @@
   elements.cancelImportPatterns.addEventListener("click", Dialog.closePatternImport);
   for (const dialog of [
     elements.exportAllRecordsDialog,
+    elements.importAllRecordsDialog,
     elements.savePatternDialog,
     elements.managePatternsDialog,
     elements.importPatternsDialog,
@@ -1033,6 +1059,7 @@
   ]) {
     dialog.addEventListener("close", () => {
       if (!elements.exportAllRecordsDialog.open
+        && !elements.importAllRecordsDialog.open
         && !elements.savePatternDialog.open
         && !elements.managePatternsDialog.open
         && !elements.importPatternsDialog.open

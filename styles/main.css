@@ -770,6 +770,17 @@ kbd {
   grid-column: 1 / -1;
 }
 
+.record-backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+#importAllRecordsSummary {
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
 .record-backup-controls .field-note,
 #exportAllRecordsProgress {
   overflow: visible;

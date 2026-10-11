@@ -1,6 +1,6 @@
-# 逐项导出并删除
+# 记录备份、删除与批量恢复
 
-- **Status**: PENDING
+- **Status**: VERIFIED
 - **Approved**: 2026-10-11 用户确认继续实现；先保存再删除，不额外确认
 - **Type**: feature
 
@@ -19,7 +19,7 @@
 - **Files**: index.html、styles/main.css、scripts/app.js、scripts/dialogs.js、tests/static-app.test.js、e2e/bulk-export-delete.spec.js、README.md、docs/requirements.md、docs/technical-design.md、docs/record-export-delete-plan.md。
 - **Approved**: 2026-10-11 用户要求添加主页按钮；按 Skill 规则验收后合并 main、推送、核对并删除本次短分支。
 
-## R3 主页全部导入 `[PENDING]`
+## R3 主页全部导入 `[VERIFIED]`
 
 - **Objective**: 通过主页配对按钮一次选择函数/图案备份，预览并确认安全合并，不覆盖现有记录。
 - **Definition of Done**: `node --test tests/record-import.test.js tests/static-app.test.js tests/logic-function-library.test.js tests/pattern-library.test.js` 全绿；完整桌面/移动 Playwright 全绿，覆盖双库恢复、单库、重复/冲突、坏文件/超限/取消、写入失败回滚与并发新增；语法、lint、diff 检查通过。
@@ -49,3 +49,14 @@
 - 已查看桌面与移动 `test-results/**/bulk-homepage.png`，主页按钮可见、说明完整换行，无横向溢出。
 - 未操作用户右侧浏览器的数据；不变更 Android 外壳、不构建 APK、不打版本标签。仅运行相关 Node 测试集，未宣称完整 Node 套件已运行。
 - 本次保持存档格式及 Android 外壳不变，不构建或发布 APK；原代码 ZIP 可用于恢复。
+
+## R3 验证记录（2026-10-11）
+
+- `node --test tests/record-import.test.js tests/static-app.test.js tests/logic-function-library.test.js tests/pattern-library.test.js`：49/49 通过，包含新增 12 项导入核心用例和 1 项主页结构用例。
+- `node node_modules/@playwright/test/cli.js test --max-failures=2`：114/114 通过（2.4 分钟），原有 78 项与新增 36 项批量导入交互均在桌面 Chromium / Pixel 7 视口通过。
+- scripts 中全部 JS 的 `node --check`、新浏览器测试语法检查、`node node_modules/eslint/bin/eslint.js scripts`、`git diff --check`：通过。环境仍使用本地 Node CLI，不依赖不可用的 npm/npx。
+- 测试点击配对按钮捕获多文件选择事件，用刚才导出并清空的两份备份进行预览、确认恢复、重载与重复导入；当前棋盘不变。保留同 ID / 同名旧记录与预览期间另一页面新增内容，支持单类恢复、函数 v1 迁移与空库。
+- 故障注入覆盖坏 JSON、未知格式、版本不支持、同类重复文件、超过两份、函数文件超限、读取失败、预览取消 / Escape / 读取期间取消、原库损坏、第一和第二次持久化失败、回滚失败。核心测试额外验证原键不存在时回滚删除新键、精确还原原始字符串、合并总大小超限时零写入。
+- 首轮浏览器测试发现导出完成后新导入按钮未解除禁用，已修复操作结束时的按钮状态同步；最终完整回归全绿。关闭事件也避免重置已经重新打开的导入草稿。
+- 已查看桌面与移动 `test-results/**/bulk-import-homepage.png`、`bulk-import-preview.png`：配对按钮、完整说明、双库计数及确认/取消可见，没有横向裁切。
+- 文件输入由 Playwright 驱动，配对导出文件句柄仍由用例模拟；未人工验证操作系统文件选择窗口，也未触碰用户右侧浏览器存档。未运行完整 Node 套件、不构建 Android APK、不打标签。
