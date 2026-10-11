@@ -1,6 +1,6 @@
 # 记录备份、删除与批量恢复
 
-- **Status**: PENDING
+- **Status**: COMPLETE
 - **Approved**: 2026-10-11 用户确认继续实现；先保存再删除，不额外确认
 - **Type**: feature
 
@@ -26,7 +26,7 @@
 - **Files**: index.html、styles/main.css、scripts/record-import.js、scripts/dialogs.js、scripts/app.js、package.json、tests/record-import.test.js、tests/static-app.test.js、e2e/bulk-import.spec.js、README.md、docs/requirements.md、docs/technical-design.md、docs/record-export-delete-plan.md。
 - **Approved**: 2026-10-11 用户要求对应的全部导入按钮，验收后按已授权 Skill 流程合并推送主分支并清理本次短分支。
 
-## R4 批量备份状态异常与回读校验 `[PENDING]`
+## R4 批量备份状态异常与回读校验 `[COMPLETE]`
 
 - **Objective**: 批量存盘报告文件名和失败阶段，可恢复的原生文件状态错误最多重试一次；两份文件关闭并回读匹配后才清空。
 - **Definition of Done**: 新回归在旧代码上准确失败；`node --test tests/file-backup.test.js tests/record-import.test.js tests/static-app.test.js tests/logic-function-library.test.js tests/pattern-library.test.js` 全绿；完整桌面/移动 Playwright 全绿，包含状态异常、持续失败、回读为空/不一致/失败、原生 OPFS 独立存档保存恢复；语法、lint、diff 检查通过。

@@ -45,11 +45,24 @@ test("配对按钮完成全部导出删除与全部导入恢复，不改变棋�
   await page.screenshot({ path: testInfo.outputPath("bulk-import-homepage.png"), fullPage: true });
   await page.evaluate(() => {
     window.backupFiles = [];
+    const files = new Map();
     window.showDirectoryPicker = async () => ({
-      getFileHandle: async (name) => ({ createWritable: async () => {
-        let raw;
-        return { write: async (value) => { raw = value; }, close: async () => { window.backupFiles.push({ name, raw }); } };
-      } }),
+      getFileHandle: async (name, { create }) => {
+        if (!files.has(name)) {
+          if (!create) throw new DOMException("不存在", "NotFoundError");
+          files.set(name, "");
+        }
+        return {
+          createWritable: async () => {
+            let raw;
+            return { write: async (value) => { raw = value; }, close: async () => {
+              files.set(name, raw);
+              window.backupFiles.push({ name, raw });
+            } };
+          },
+          getFile: async () => ({ text: async () => files.get(name) }),
+        };
+      },
     });
   });
   await page.locator("#exportDeleteAllRecordsButton").click();

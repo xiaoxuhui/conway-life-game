@@ -189,6 +189,7 @@
     PatternStore,
     FunctionStore,
     RecordImport: window.LifeRecordImport,
+    FileBackup: window.LifeFileBackup,
     LogicCode,
     Presets,
     helpers: {

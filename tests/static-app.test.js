@@ -76,6 +76,13 @@ test("主页全部导入使用多选文件并提供独立预览确认", () => {
   assert.match(appSource, /Dialog\.openAllRecordsImport\(files\)/);
 });
 
+test("主页批量备份注入并加载可回读校验的保存模块", () => {
+  assert.ok(html.indexOf("scripts/file-backup.js") >= 0);
+  assert.ok(html.indexOf("scripts/file-backup.js") < html.indexOf("scripts/dialogs.js"));
+  assert.match(appSource, /FileBackup: window\.LifeFileBackup/);
+  assert.match(dialogsSource, /await FileBackup\.save\(directory, name, raw/);
+});
+
 test("演化速度使用可手动输入的数字框并公开有效范围", () => {
   assert.match(html, /id=["']speedInput["'][^>]*type=["']number["'][^>]*min=["']1["'][^>]*max=["']1000["'][^>]*step=["']1["']/);
   assert.doesNotMatch(html, /id=["']speedRange["']/);

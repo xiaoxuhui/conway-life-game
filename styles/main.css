@@ -753,6 +753,7 @@ kbd {
   color: var(--danger);
   background: rgb(255 157 147 / 7%);
   font-size: 0.8rem;
+  overflow-wrap: anywhere;
 }
 
 .dialog-error[hidden] {

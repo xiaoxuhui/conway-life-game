@@ -10,7 +10,7 @@
   // app 层辅助函数（showToast/render/stop/closeDialog/replacePlacementPattern/
   // setLogicCodeFeedback/formatNumber），从而避免与 app.js 主控制器深度耦合。
   function create(context) {
-    const { state, elements, Life, PatternStore, FunctionStore, RecordImport, LogicCode, Presets } = context;
+    const { state, elements, Life, PatternStore, FunctionStore, RecordImport, FileBackup, LogicCode, Presets } = context;
     const {
       showToast, render, stop, closeDialog, replacePlacementPattern, setLogicCodeFeedback, formatNumber,
     } = context.helpers;
@@ -168,17 +168,19 @@
         if (typeof window.showDirectoryPicker !== "function") {
           throw new Error("当前浏览器不支持选择备份目录，可使用原有全部保存功能。");
         }
-        elements.exportAllRecordsProgress.textContent = "选择备份目录；两份文件保存完成后清空记录。";
+        elements.exportAllRecordsProgress.textContent = "选择备份目录；两份文件保存并回读校验完成后清空记录。";
         openDialog(elements.exportAllRecordsDialog);
         const directory = await window.showDirectoryPicker({ mode: "readwrite" });
-        const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+        const stamp = `${new Date().toISOString().replace(/[:.]/g, "-")}-${window.crypto.randomUUID()}`;
         for (const [name, raw] of [
           [`conway-life-patterns-${stamp}.json`, patternRaw],
           [`conway-life-functions-${stamp}.json`, functionRaw],
         ]) {
-          elements.exportAllRecordsProgress.textContent = `正在保存：${name}`;
-          const handle = await directory.getFileHandle(name, { create: true });
-          await writeBackupFile(handle, raw);
+          await FileBackup.save(directory, name, raw, {
+            onProgress({ stage, attempt }) {
+              elements.exportAllRecordsProgress.textContent = `${name}：${stage}${attempt > 1 ? "（重试 1/1）" : ""}`;
+            },
+          });
         }
         saved = true;
         if (PatternStore.serializeLibrary(PatternStore.loadLibrary(storage), { pretty: true }) !== patternRaw
