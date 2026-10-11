@@ -1,6 +1,6 @@
 # 记录备份、删除与批量恢复
 
-- **Status**: VERIFIED
+- **Status**: PENDING
 - **Approved**: 2026-10-11 用户确认继续实现；先保存再删除，不额外确认
 - **Type**: feature
 
@@ -25,6 +25,15 @@
 - **Definition of Done**: `node --test tests/record-import.test.js tests/static-app.test.js tests/logic-function-library.test.js tests/pattern-library.test.js` 全绿；完整桌面/移动 Playwright 全绿，覆盖双库恢复、单库、重复/冲突、坏文件/超限/取消、写入失败回滚与并发新增；语法、lint、diff 检查通过。
 - **Files**: index.html、styles/main.css、scripts/record-import.js、scripts/dialogs.js、scripts/app.js、package.json、tests/record-import.test.js、tests/static-app.test.js、e2e/bulk-import.spec.js、README.md、docs/requirements.md、docs/technical-design.md、docs/record-export-delete-plan.md。
 - **Approved**: 2026-10-11 用户要求对应的全部导入按钮，验收后按已授权 Skill 流程合并推送主分支并清理本次短分支。
+
+## R4 批量备份状态异常与回读校验 `[PENDING]`
+
+- **Objective**: 批量存盘报告文件名和失败阶段，可恢复的原生文件状态错误最多重试一次；两份文件关闭并回读匹配后才清空。
+- **Definition of Done**: 新回归在旧代码上准确失败；`node --test tests/file-backup.test.js tests/record-import.test.js tests/static-app.test.js tests/logic-function-library.test.js tests/pattern-library.test.js` 全绿；完整桌面/移动 Playwright 全绿，包含状态异常、持续失败、回读为空/不一致/失败、原生 OPFS 独立存档保存恢复；语法、lint、diff 检查通过。
+- **Files**: scripts/file-backup.js、scripts/dialogs.js、scripts/app.js、index.html、package.json、styles/main.css、tests/file-backup.test.js、tests/static-app.test.js、e2e/bulk-export-delete.spec.js、e2e/bulk-import.spec.js、README.md、docs/requirements.md、docs/technical-design.md、docs/record-export-delete-plan.md。
+- **Approved**: 2026-10-11 用户确认修复保存流程并保留删除保护，沿用已授权的短分支合并推送流程。
+- **现场证据**: `D:/aiden/conway-life` 的同批图案备份为 2,977,916 字节、可解析为 33 个图案，函数备份为 0 字节。失败发生在第二份保存阶段，尚不能区分创建流/写入/关闭；原生错误文字不能独自证明根因。不得覆盖或删除这两份文件，不操作用户的浏览器记录。
+- **边界**: 本次仅修复主页批量保存；单项导出保持兼容。自动化用独立测试库与目录；原生 OPFS 不等于用户内置浏览器的 Windows 文件选择器，后者仍需用户复测。不构建 Android、不打标签。
 
 ## R1 验证记录（2026-10-11）
 
