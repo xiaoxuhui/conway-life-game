@@ -1,6 +1,6 @@
 # 记录备份、删除与批量恢复
 
-- **Status**: COMPLETE
+- **Status**: VERIFIED
 - **Approved**: 2026-10-11 用户确认继续实现；先保存再删除，不额外确认
 - **Type**: feature
 
@@ -26,7 +26,7 @@
 - **Files**: index.html、styles/main.css、scripts/record-import.js、scripts/dialogs.js、scripts/app.js、package.json、tests/record-import.test.js、tests/static-app.test.js、e2e/bulk-import.spec.js、README.md、docs/requirements.md、docs/technical-design.md、docs/record-export-delete-plan.md。
 - **Approved**: 2026-10-11 用户要求对应的全部导入按钮，验收后按已授权 Skill 流程合并推送主分支并清理本次短分支。
 
-## R4 批量备份状态异常与回读校验 `[COMPLETE]`
+## R4 批量备份状态异常与回读校验 `[VERIFIED]`
 
 - **Objective**: 批量存盘报告文件名和失败阶段，可恢复的原生文件状态错误最多重试一次；两份文件关闭并回读匹配后才清空。
 - **Definition of Done**: 新回归在旧代码上准确失败；`node --test tests/file-backup.test.js tests/record-import.test.js tests/static-app.test.js tests/logic-function-library.test.js tests/pattern-library.test.js` 全绿；完整桌面/移动 Playwright 全绿，包含状态异常、持续失败、回读为空/不一致/失败、原生 OPFS 独立存档保存恢复；语法、lint、diff 检查通过。
@@ -69,3 +69,16 @@
 - 首轮浏览器测试发现导出完成后新导入按钮未解除禁用，已修复操作结束时的按钮状态同步；最终完整回归全绿。关闭事件也避免重置已经重新打开的导入草稿。
 - 已查看桌面与移动 `test-results/**/bulk-import-homepage.png`、`bulk-import-preview.png`：配对按钮、完整说明、双库计数及确认/取消可见，没有横向裁切。
 - 文件输入由 Playwright 驱动，配对导出文件句柄仍由用例模拟；未人工验证操作系统文件选择窗口，也未触碰用户右侧浏览器存档。未运行完整 Node 套件、不构建 Android APK、不打标签。
+
+## R4 验证记录（2026-10-11）
+
+- 红绿证据：旧代码运行 `node node_modules/@playwright/test/cli.js test e2e/bulk-export-delete.spec.js --project=desktop-chromium --grep '第二份状态异常' --max-failures=1`，1 项失败，错误元素准确出现用户报告的英文状态异常。修复后同命令 1/1 通过。
+- `node --test tests/file-backup.test.js tests/record-import.test.js tests/static-app.test.js tests/logic-function-library.test.js tests/pattern-library.test.js`：70/70 通过。
+- `$webTestPaths = @(rg --files tests | Where-Object { $_ -notlike '*android-shell*' }); & node --test $webTestPaths`：全部网页 Node 测试 149/149 通过（105.4 秒）。明确排除 Android 外壳测试，遵守网页优先节奏，没有同步 Android assets 或构建 APK。
+- `node node_modules/@playwright/test/cli.js test e2e/bulk-export-delete.spec.js e2e/bulk-import.spec.js --max-failures=2`：100/100 通过（1.6 分钟），桌面 Chromium 与 Pixel 7 视口。
+- `node node_modules/@playwright/test/cli.js test --max-failures=2`：完整浏览器回归 142/142 通过（2.5 分钟），包含原有单项导出删除、两库导入导出及游戏冒烟；无未处理页面异常。
+- 核心故障注入覆盖：打开流/写入/关闭/读取一次状态异常和持续状态错误、UnknownError 的已知状态文字、其它权限/容量/取消/未知错误不重试、中止失败禁止重写、空/不一致回读、同名旧文件零写入、检查目录失败。
+- 浏览器交互覆盖：按钮及进度绑定、回读完成前不删除、第二份持续异常仅两次尝试且保留全部记录、读取/空文件/内容变化阻断清空、回读异常只重读不重写、结束后按钮恢复；原取消、存储回滚、并发记录变化与导入恢复回归通过。
+- 原生 OPFS 测试使用隔离的浏览器测试上下文及新建随机目录，真实 FileSystemDirectoryHandle/FileSystemFileHandle/可写流保存 33 个图案和 6 个函数；图案备份大于 2.5 MB，校验两份内容、既有哨兵文件不变，主页全部导入恢复并重载。一组正常，一组在第二份原生文件打开流时注入一次状态异常，两组在桌面/移动均通过。
+- 已查看桌面与移动 `test-results/**/backup-stage-error.png`：完整文件名、中文阶段和原生错误可换行显示，无横向溢出。原生 OPFS 不能证明内置浏览器 Windows 目录错误的根因已消失，仍需用户刷新网页并在原目录复测；未操作用户实际记录或旧备份，也不删除失败残留文件。
+- `node -e "require('node:child_process').execSync(require('./package.json').scripts.check, {stdio:'inherit'})"`、`node node_modules/eslint/bin/eslint.js scripts`、`git diff --check`：通过。
