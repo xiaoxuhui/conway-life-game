@@ -25,6 +25,65 @@ function storage(initial = {}) {
   };
 }
 
+test("单文件备份保留两库全部字段，导入并安全合并后可恢复", async () => {
+  const raw = Import.serializeBackup(imported);
+  const backup = JSON.parse(raw);
+  assert.equal(backup.format, "conway-life-record-backup");
+  assert.equal(backup.version, 1);
+  assert.deepEqual(backup.patterns, imported.patterns);
+  assert.deepEqual(backup.functions, imported.functions);
+  const recovered = await Import.readFiles([file(raw, "任意文件名.json")]);
+  assert.deepEqual(recovered, imported);
+  const saved = storage();
+  Import.commit(saved, Import.prepare(saved, recovered));
+  assert.deepEqual(Patterns.loadLibrary(saved), imported.patterns);
+  assert.deepEqual(Functions.loadLibrary(saved), imported.functions);
+});
+
+test("单文件备份包含空库，重复导入不重复写入", async () => {
+  for (const type of ["patterns", "functions"]) {
+    const values = { ...imported, [type]: type === "patterns" ? Patterns.createLibrary() : Functions.createLibrary() };
+    assert.deepEqual(await Import.readFiles([file(Import.serializeBackup(values))]), values);
+  }
+  const values = { patterns: Patterns.createLibrary(), functions: Functions.createLibrary() };
+  assert.deepEqual(await Import.readFiles([file(Import.serializeBackup(values))]), values);
+  const saved = storage();
+  const recovered = await Import.readFiles([file(Import.serializeBackup(imported))]);
+  Import.commit(saved, Import.prepare(saved, recovered));
+  saved.writes.length = 0;
+  Import.commit(saved, Import.prepare(saved, recovered));
+  assert.deepEqual(saved.writes, []);
+});
+
+test("合并备份未知版本、缺库和任一嵌套库损坏均拒绝", async () => {
+  const backup = { format: "conway-life-record-backup", version: 1, ...imported };
+  for (const invalid of [
+    { ...backup, version: 99 }, { ...backup, patterns: undefined }, { ...backup, functions: null },
+    { ...backup, patterns: { ...imported.patterns, version: 99 } },
+    { ...backup, functions: { ...imported.functions, functions: [{ ...fn, name: "" }] } },
+  ]) await assert.rejects(Import.readFiles([file(invalid)]));
+  assert.throws(() => Import.serializeBackup({ ...imported, functions: null }));
+});
+
+test("合并备份不得与旧库或另一份合并备份混选，顺序无关", async () => {
+  const backup = file(Import.serializeBackup(imported));
+  for (const files of [[backup, file(imported.patterns)], [file(imported.functions), backup], [backup, backup]]) {
+    await assert.rejects(Import.readFiles(files), /合并备份.*单独选择/);
+  }
+});
+
+test("合并备份限制实际 UTF-8 字节和各嵌套库容量", async () => {
+  let read = false;
+  await assert.rejects(Import.readFiles([{
+    name: "huge.json", size: Import.MAX_BACKUP_BYTES + 1, text: async () => { read = true; },
+  }]), /8 MB/);
+  assert.equal(read, false);
+  const padded = Import.serializeBackup(imported) + " ".repeat(Import.MAX_BACKUP_BYTES);
+  await assert.rejects(Import.readFiles([{ name: "fake-size.json", size: 1, text: async () => padded }]), /8 MB/);
+  const oversized = { ...imported.functions, functions: [{ ...fn, code: "A".repeat(Functions.MAX_LIBRARY_BYTES) }] };
+  await assert.rejects(Import.readFiles([file({ format: "conway-life-record-backup", version: 1, ...imported, functions: oversized })]), /大小上限/);
+});
+
 test("按内容识别两库，与文件名及选择顺序无关", async () => {
   assert.deepEqual(await Import.readFiles([file(imported.functions, "p.json"), file(imported.patterns, "f.json")]), imported);
 });
@@ -55,7 +114,7 @@ test("非法文件数、重复类型、坏 JSON 和未知格式均拒绝", async
 
 test("在读取前限制大文件并检查函数库自己的上限", async () => {
   let read = false;
-  await assert.rejects(Import.readFiles([{ name: "big.json", size: Patterns.MAX_LIBRARY_BYTES + 1, text: async () => { read = true; } }]), /4 MB/);
+  await assert.rejects(Import.readFiles([{ name: "big.json", size: Import.MAX_BACKUP_BYTES + 1, text: async () => { read = true; } }]), /8 MB/);
   assert.equal(read, false);
   await assert.rejects(Import.readFiles([file(JSON.stringify(imported.functions) + " ".repeat(Functions.MAX_LIBRARY_BYTES))]), /大小上限/);
 });

@@ -4,7 +4,7 @@
 - **Approved**: 2026-10-15 用户要求全部导出默认保存在一个文件中。
 - **Type**: feature
 
-## S1 Versioned backup envelope `[PENDING]`
+## S1 Versioned backup envelope `[COMPLETE]`
 
 - **Objective**: Serialize both custom libraries into one JSON; import that file or the legacy one/two library files without overwriting local records.
 - **Definition of Done**: `node --test tests/record-import.test.js` passes; cover round trip, empty libraries, nested validation, unsupported version, size limits and mixed/duplicate files.

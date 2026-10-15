@@ -8,17 +8,47 @@
   "use strict";
 
   const stores = { patterns: PatternStore, functions: FunctionStore };
+  const BACKUP_FORMAT = "conway-life-record-backup";
+  const BACKUP_VERSION = 1;
+  const MAX_BACKUP_BYTES = 8_000_000;
+
+  function checkBackupSize(raw) {
+    if (new TextEncoder().encode(raw).length > MAX_BACKUP_BYTES) throw new Error("合并备份文件超过 8 MB 大小上限");
+  }
+
+  function parseBackup(data) {
+    if (data.version !== BACKUP_VERSION) throw new Error("不支持的合并备份版本");
+    const imported = {};
+    for (const [type, store] of Object.entries(stores)) {
+      if (!data[type] || typeof data[type] !== "object") throw new Error("合并备份必须同时包含图案库和函数库");
+      imported[type] = store.parseLibrary(JSON.stringify(data[type]));
+    }
+    return imported;
+  }
+
+  function serializeBackup(libraries) {
+    const validated = parseBackup({ ...libraries, version: BACKUP_VERSION });
+    const raw = JSON.stringify({ format: BACKUP_FORMAT, version: BACKUP_VERSION, ...validated }, null, 2);
+    checkBackupSize(raw);
+    return raw;
+  }
 
   async function readFiles(files) {
-    if (!files.length || files.length > 2) throw new Error("请选择一份图案库和/或一份函数库 JSON，最多两份文件。");
+    if (!files.length || files.length > 2) throw new Error("请选择一份合并备份，或旧版图案库和/或函数库 JSON（最多两份）。");
     const imported = {};
     for (const file of files) {
       try {
-        if (file.size > PatternStore.MAX_LIBRARY_BYTES) throw new Error("文件超过 4 MB 大小上限");
+        if (file.size > MAX_BACKUP_BYTES) throw new Error("文件超过 8 MB 大小上限");
         const raw = await file.text();
-        const format = JSON.parse(raw)?.format;
+        checkBackupSize(raw);
+        const data = JSON.parse(raw);
+        const format = data?.format;
+        if (format === BACKUP_FORMAT) {
+          if (files.length !== 1) throw new Error("合并备份必须单独选择，不能与其它备份混选");
+          return parseBackup(data);
+        }
         const type = Object.keys(stores).find((name) => stores[name].LIBRARY_FORMAT === format);
-        if (!type) throw new Error("不是受支持的函数库或图案库备份");
+        if (!type) throw new Error("不是受支持的合并备份、函数库或图案库备份");
         if (imported[type]) throw new Error("同一类备份只能选择一份，请分别选择函数库和图案库");
         imported[type] = stores[type].parseLibrary(raw);
       } catch (error) {
@@ -62,5 +92,5 @@
     }
   }
 
-  return Object.freeze({ readFiles, prepare, commit });
+  return Object.freeze({ readFiles, prepare, commit, serializeBackup, BACKUP_FORMAT, BACKUP_VERSION, MAX_BACKUP_BYTES });
 });
