@@ -1,6 +1,6 @@
 # Single-file record backup
 
-- **Status**: PENDING
+- **Status**: COMPLETE
 - **Approved**: 2026-10-15 用户要求全部导出默认保存在一个文件中。
 - **Type**: feature
 
@@ -11,11 +11,12 @@
 - **Files**: scripts/record-import.js, tests/record-import.test.js.
 - **Evidence**: `node --test tests/record-import.test.js`: 17/17 pass (2026-10-15). Before implementation: 5 expected failures including missing serializeBackup.
 
-## S2 Homepage integration `[COMPLETE]`
+## S2 Homepage integration `[VERIFIED]`
 
 - **Objective**: Export exactly one new file, close and read it back before clearing; preserve cancellation, retry, concurrent-change and rollback protections. Display accurate instructions.
 - **Definition of Done**: Related Node tests and desktop/mobile Playwright tests pass, including held close/read, failures, disk contents, restore/reload and large OPFS backup; syntax/lint pass.
 - **Files**: scripts/dialogs.js, index.html, tests/static-app.test.js, e2e/bulk-export-delete.spec.js, e2e/bulk-import.spec.js.
+- **Evidence**: related Node 75/75, all web Node 154/154, full desktop/mobile Playwright 140/140 (2.2m), syntax/lint/diff pass; screenshots inspected. See single-backup-test-report.md.
 
 ## S3 Verification and delivery `[COMPLETE]`
 

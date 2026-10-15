@@ -16,7 +16,7 @@
 - `node -e "require('node:child_process').execSync(require('./package.json').scripts.check, {stdio:'inherit'})"`: pass.
 - `node node_modules/eslint/bin/eslint.js scripts`: pass.
 - `git diff --check`: pass.
-- Final full browser command: `node node_modules/@playwright/test/cli.js test --max-failures=2 --output=test-results/full-single-backup` — result pending at report creation.
+- Final full browser command: `node node_modules/@playwright/test/cli.js test --max-failures=2 --output=test-results/full-single-backup`: **140/140 passed (2.2m), exit 0**, desktop Chromium and Pixel 7 viewport. Runtime: Node v24.19.0, Playwright 1.62.1.
 
 ## Browser interaction coverage
 
@@ -36,4 +36,4 @@
 
 ## Delivery
 
-Pending final browser completion and main merge/push verification.
+All local acceptance checks completed. Main merge/push verification pending.
