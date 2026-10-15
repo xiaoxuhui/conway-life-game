@@ -36,4 +36,4 @@
 
 ## Delivery
 
-All local acceptance checks completed. Main merge/push verification pending.
+All local acceptance checks completed. Feature merged to main without dropping the remote maintenance commits; `git push origin main` succeeded and `git ls-remote --heads origin main` matched local `f9cd0da6e7d39d3601fff479259601d6eec331bc`. This evidence-only follow-up is committed on the same feature branch and merged/pushed before deleting that branch. No other branch is cleaned up.
