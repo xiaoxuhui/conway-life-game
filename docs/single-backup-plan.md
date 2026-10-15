@@ -17,7 +17,7 @@
 - **Definition of Done**: Related Node tests and desktop/mobile Playwright tests pass, including held close/read, failures, disk contents, restore/reload and large OPFS backup; syntax/lint pass.
 - **Files**: scripts/dialogs.js, index.html, tests/static-app.test.js, e2e/bulk-export-delete.spec.js, e2e/bulk-import.spec.js.
 
-## S3 Verification and delivery `[PENDING]`
+## S3 Verification and delivery `[COMPLETE]`
 
 - **Objective**: Record actual evidence and limits, update user documentation, merge/push main and remove only this feature branch after successful acceptance.
 - **Definition of Done**: All web Node tests (Android excluded), full desktop/mobile Playwright, syntax/lint and `git diff --check` pass; inspect browser screenshots; verify main using `git ls-remote` after pushing.
