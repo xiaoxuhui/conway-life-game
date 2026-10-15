@@ -81,6 +81,10 @@ test("主页批量备份注入并加载可回读校验的保存模块", () => {
   assert.ok(html.indexOf("scripts/file-backup.js") < html.indexOf("scripts/dialogs.js"));
   assert.match(appSource, /FileBackup: window\.LifeFileBackup/);
   assert.match(dialogsSource, /await FileBackup\.save\(directory, name, raw/);
+  assert.match(dialogsSource, /RecordImport\.serializeBackup\(\{ patterns, functions \}\)/);
+  assert.match(dialogsSource, /conway-life-records-/);
+  assert.match(html, /合并保存为一个 JSON 文件/);
+  assert.match(html, /也兼容旧版分开的函数库和图案库 JSON/);
 });
 
 test("演化速度使用可手动输入的数字框并公开有效范围", () => {

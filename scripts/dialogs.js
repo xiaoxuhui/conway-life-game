@@ -165,23 +165,20 @@
         }
         const patternRaw = PatternStore.serializeLibrary(patterns, { pretty: true });
         const functionRaw = FunctionStore.serializeLibrary(functions, { pretty: true });
+        const raw = RecordImport.serializeBackup({ patterns, functions });
         if (typeof window.showDirectoryPicker !== "function") {
           throw new Error("当前浏览器不支持选择备份目录，可使用原有全部保存功能。");
         }
-        elements.exportAllRecordsProgress.textContent = "选择备份目录；两份文件保存并回读校验完成后清空记录。";
+        elements.exportAllRecordsProgress.textContent = "选择备份目录；图案和函数将保存为一个 JSON 文件，回读校验成功后清空记录。";
         openDialog(elements.exportAllRecordsDialog);
         const directory = await window.showDirectoryPicker({ mode: "readwrite" });
         const stamp = `${new Date().toISOString().replace(/[:.]/g, "-")}-${window.crypto.randomUUID()}`;
-        for (const [name, raw] of [
-          [`conway-life-patterns-${stamp}.json`, patternRaw],
-          [`conway-life-functions-${stamp}.json`, functionRaw],
-        ]) {
-          await FileBackup.save(directory, name, raw, {
-            onProgress({ stage, attempt }) {
-              elements.exportAllRecordsProgress.textContent = `${name}：${stage}${attempt > 1 ? "（重试 1/1）" : ""}`;
-            },
-          });
-        }
+        const name = `conway-life-records-${stamp}.json`;
+        await FileBackup.save(directory, name, raw, {
+          onProgress({ stage, attempt }) {
+            elements.exportAllRecordsProgress.textContent = `${name}：${stage}${attempt > 1 ? "（重试 1/1）" : ""}`;
+          },
+        });
         saved = true;
         if (PatternStore.serializeLibrary(PatternStore.loadLibrary(storage), { pretty: true }) !== patternRaw
           || FunctionStore.serializeLibrary(FunctionStore.loadLibrary(storage), { pretty: true }) !== functionRaw) {
@@ -212,7 +209,7 @@
         rebuildPatternOptions();
         rebuildLogicFunctionOptions();
         render();
-        showToast(`已保存两份备份并删除 ${patterns.patterns.length} 个图案、${functions.functions.length} 个函数`, { duration: 7000 });
+        showToast(`已保存一份合并备份并删除 ${patterns.patterns.length} 个图案、${functions.functions.length} 个函数`, { duration: 7000 });
       } catch (error) {
         if (!saved && error.name === "AbortError") showToast("已取消保存，全部记录已保留");
         else {

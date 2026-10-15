@@ -19,6 +19,7 @@ const libraries = {
 const button = "#exportDeleteAllRecordsButton";
 const dialog = "#exportAllRecordsDialog";
 const error = "#exportAllRecordsError";
+const bundle = (values) => ({ format: "conway-life-record-backup", version: 1, ...values });
 
 async function seed(page, values = libraries) {
   await page.goto("/");
@@ -58,7 +59,7 @@ async function picker(page, options = {}) {
           const fails = (stage) => options.failure === `${fileIndex}-${stage}`;
           if (fails("handle")) throw new Error("文件创建失败");
           const stateFault = (stage) => {
-            if (fileIndex === 1 && options.transient && stage === (options.transientStage || "create")) {
+            if (options.transient && stage === (options.transientStage || "create")) {
               if (stateFailures++ < (options.persistent ? 99 : 1)) {
                 throw new DOMException("An operation that depends on state cached in an interface object was made but the state had changed since it was read from disk.", "InvalidStateError");
               }
@@ -82,7 +83,7 @@ async function picker(page, options = {}) {
                   if (options.disk) await window.writeBulkBackup(name, raw);
                   file.raw = raw;
                   window.savedFiles.push({ name, raw });
-                  if (options.hold && fileIndex === 1) await new Promise((resolve) => { window.completeBulkBackup = resolve; });
+                  if (options.hold) await new Promise((resolve) => { window.completeBulkBackup = resolve; });
                 },
                 async abort() { window.abortCalls += 1; },
               };
@@ -91,7 +92,7 @@ async function picker(page, options = {}) {
               stateFault("read");
               if (fails("read")) throw new Error("文件读取失败");
               return { async text() {
-                if (options.holdRead && fileIndex === 1) await new Promise((resolve) => { window.completeBulkRead = resolve; });
+                if (options.holdRead) await new Promise((resolve) => { window.completeBulkRead = resolve; });
                 if (fails("empty")) return "";
                 if (fails("mismatch")) return "不一致";
                 return options.disk ? window.readBulkBackup(name) : file.raw;
@@ -113,7 +114,7 @@ async function picker(page, options = {}) {
   }, { options, keys });
 }
 
-test("主页全部备份：两份文件关闭后才清空，可用原导入流程恢复", async ({ page }, testInfo) => {
+test("主页全部备份：一份合并文件关闭回读后才清空，可用全部导入恢复", async ({ page }, testInfo) => {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await seed(page);
@@ -139,9 +140,10 @@ test("主页全部备份：两份文件关闭后才清空，可用原导入流�
   await expect(page.locator(dialog)).toBeVisible();
   for (const name of await fs.readdir(directory)) {
     const contents = JSON.parse(await fs.readFile(path.join(directory, name), "utf8"));
-    expect(contents).toEqual(name.includes("patterns") ? libraries.patterns : libraries.functions);
+    expect(name).toMatch(/^conway-life-records-.*\.json$/);
+    expect(contents).toEqual(bundle(libraries));
   }
-  expect(await fs.readdir(directory)).toHaveLength(2);
+  expect(await fs.readdir(directory)).toHaveLength(1);
   await page.evaluate(() => window.completeBulkBackup());
   await expect(page.locator(dialog)).not.toBeVisible();
   const empty = await stored(page);
@@ -154,20 +156,17 @@ test("主页全部备份：两份文件关闭后才清空，可用原导入流�
   expect(await page.locator("#aliveValue").textContent()).toBe(world);
   await page.reload();
   expect(await stored(page)).toEqual(empty);
-  for (const [collection, input, confirm] of [
-    ["patterns", "#importPatternsInput", "#confirmImportPatternsButton"],
-    ["functions", "#importLogicFunctionsInput", "#confirmImportLogicFunctionsButton"],
-  ]) {
-    const filename = (await fs.readdir(directory)).find((name) => name.includes(collection));
-    await page.locator(input).setInputFiles(path.join(directory, filename));
-    await page.locator(confirm).click();
-  }
+  const [filename] = await fs.readdir(directory);
+  await page.locator("#importAllRecordsInput").setInputFiles(path.join(directory, filename));
+  await page.locator("#confirmImportAllRecordsButton").click();
+  expect(await stored(page)).toEqual(libraries);
+  await page.reload();
   expect(await stored(page)).toEqual(libraries);
   await expect(page.locator(button)).toBeEnabled();
   expect(errors).toEqual([]);
 });
 
-for (const failure of ["cancel", "unsupported", "0-handle", "0-create", "0-write", "0-close", "1-handle", "1-create", "1-write", "1-close", "storage-first", "storage-second"]) {
+for (const failure of ["cancel", "unsupported", "0-handle", "0-create", "0-write", "0-close", "storage-first", "storage-second"]) {
   test(`全部备份：${failure} 失败保留全部记录`, async ({ page }) => {
     await seed(page);
     await picker(page, { failure });
@@ -179,7 +178,7 @@ for (const failure of ["cancel", "unsupported", "0-handle", "0-create", "0-write
     await expect(page.locator(button)).toBeEnabled();
     if (failure.startsWith("storage")) {
       await expect(page.locator(error)).toContainText("备份已保存");
-      expect(await page.evaluate(() => window.savedFiles.length)).toBe(2);
+      expect(await page.evaluate(() => window.savedFiles.length)).toBe(1);
     }
     if (failure.endsWith("write") || failure.endsWith("close")) expect(await page.evaluate(() => window.abortCalls)).toBe(1);
   });
@@ -208,17 +207,17 @@ test("全部备份：回滚失败诚实提示从备份恢复", async ({ page }) 
   expect(result.functions).toEqual(libraries.functions);
   await expect(page.locator("#managePatternsButton")).toBeDisabled();
   await expect(page.locator("#manageLogicFunctionsButton")).toBeEnabled();
-  expect(await page.evaluate(() => window.savedFiles.map(({ raw }) => JSON.parse(raw)))).toEqual([libraries.patterns, libraries.functions]);
+  expect(await page.evaluate(() => window.savedFiles.map(({ raw }) => JSON.parse(raw)))).toEqual([bundle(libraries)]);
 });
 
 for (const collection of ["patterns", "functions"]) {
-  test(`全部备份：${collection} 为空仍保存两份兼容文件`, async ({ page }) => {
+  test(`全部备份：${collection} 为空仍保存在一份合并文件中`, async ({ page }) => {
     const values = { ...libraries, [collection]: { ...libraries[collection], [collection]: [] } };
     await seed(page, values);
     await picker(page);
     await page.locator(button).click();
     await expect(page.locator(button)).toBeDisabled();
-    expect(await page.evaluate(() => window.savedFiles.map(({ raw }) => JSON.parse(raw)))).toEqual([values.patterns, values.functions]);
+    expect(await page.evaluate(() => window.savedFiles.map(({ raw }) => JSON.parse(raw)))).toEqual([bundle(values)]);
     const result = await stored(page);
     expect(result.patterns.patterns).toEqual([]);
     expect(result.functions.functions).toEqual([]);
@@ -230,26 +229,26 @@ test("全部备份：两库为空时禁用按钮", async ({ page }) => {
   await expect(page.locator(button)).toBeDisabled();
 });
 
-test("全部备份：第二份状态异常一次后重试完成保存及回读才清空", async ({ page }) => {
+test("全部备份：合并文件状态异常一次后重试完成保存及回读才清空", async ({ page }) => {
   await seed(page);
   await picker(page, { transient: true });
   await page.locator(button).click();
   await expect(page.locator(dialog)).not.toBeVisible();
   await expect(page.locator(error)).not.toBeVisible();
   expect((await stored(page)).functions.functions).toEqual([]);
-  expect(await page.evaluate(() => window.savedFiles.length)).toBe(2);
+  expect(await page.evaluate(() => window.savedFiles.length)).toBe(1);
 });
 
 for (const stage of ["write", "close", "read"]) {
-  test(`全部备份：第二份 ${stage} 状态异常恢复后回读成功`, async ({ page }) => {
+  test(`全部备份：合并文件 ${stage} 状态异常恢复后回读成功`, async ({ page }) => {
     await seed(page);
     await picker(page, { transient: true, transientStage: stage });
     await page.locator(button).click();
     await expect(page.locator(dialog)).not.toBeVisible();
     await expect(page.locator(error)).not.toBeVisible();
     expect((await stored(page)).functions.functions).toEqual([]);
-    expect(await page.evaluate(() => window.fileAttempts.filter((name) => name.includes("functions")).length)).toBe(stage === "read" ? 1 : 2);
-    expect(await page.evaluate(() => window.savedFiles.length)).toBe(2);
+    expect(await page.evaluate(() => window.fileAttempts.length)).toBe(stage === "read" ? 1 : 2);
+    expect(await page.evaluate(() => window.savedFiles.length)).toBe(1);
   });
 }
 
@@ -257,11 +256,11 @@ test("全部备份：持续状态错误只重试一次，保留记录并报告�
   await seed(page);
   await picker(page, { transient: true, persistent: true });
   await page.locator(button).click();
-  await expect(page.locator(error)).toContainText("conway-life-functions-");
+  await expect(page.locator(error)).toContainText("conway-life-records-");
   await expect(page.locator(error)).toContainText("打开写入流失败（已重试一次）");
   await expect(page.locator(error)).toContainText("InvalidStateError");
   expect(await stored(page)).toEqual(libraries);
-  expect(await page.evaluate(() => window.fileAttempts.filter((name) => name.includes("functions")).length)).toBe(2);
+  expect(await page.evaluate(() => window.fileAttempts.length)).toBe(2);
   expect(await page.locator(error).evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
   await page.screenshot({ path: testInfo.outputPath("backup-stage-error.png"), fullPage: true });
@@ -269,26 +268,26 @@ test("全部备份：持续状态错误只重试一次，保留记录并报告�
   await expect(page.locator("#importAllRecordsButton")).toBeEnabled();
 });
 
-for (const failure of ["0-read", "0-empty", "0-mismatch", "1-read", "1-empty", "1-mismatch"]) {
+for (const failure of ["0-read", "0-empty", "0-mismatch"]) {
   test(`全部备份：${failure} 回读校验失败即保留全部记录`, async ({ page }) => {
     await seed(page);
     await picker(page, { failure });
     await page.locator(button).click();
     await expect(page.locator(error)).toContainText("回读校验失败");
-    await expect(page.locator(error)).toContainText(failure.startsWith("0") ? "conway-life-patterns-" : "conway-life-functions-");
+    await expect(page.locator(error)).toContainText("conway-life-records-");
     expect(await stored(page)).toEqual(libraries);
     await expect(page.locator(button)).toBeEnabled();
   });
 }
 
-test("全部备份：第二份已关闭但回读未完成时不清空", async ({ page }) => {
+test("全部备份：合并文件已关闭但回读未完成时不清空", async ({ page }) => {
   await seed(page);
   await picker(page, { holdRead: true });
   await page.locator(button).click();
   await expect.poll(() => page.evaluate(() => typeof window.completeBulkRead)).toBe("function");
   await expect(page.locator("#exportAllRecordsProgress")).toContainText("回读校验");
   expect(await stored(page)).toEqual(libraries);
-  expect(await page.evaluate(() => window.savedFiles.length)).toBe(2);
+  expect(await page.evaluate(() => window.savedFiles.length)).toBe(1);
   await page.evaluate(() => window.completeBulkRead());
   await expect(page.locator(dialog)).not.toBeVisible();
   expect((await stored(page)).patterns.patterns).toEqual([]);
@@ -321,7 +320,7 @@ for (const injectState of [false, true]) {
       window.showDirectoryPicker = async () => ({
         async getFileHandle(name, options) {
           const handle = await directory.getFileHandle(name, options);
-          if (!injectState || !name.includes("functions")) return handle;
+          if (!injectState) return handle;
           return {
             async createWritable() {
               if (!injected) {
@@ -350,9 +349,9 @@ for (const injectState of [false, true]) {
     });
     expect(backups.find(({ name }) => name === "existing-backup.json").raw).toBe("旧备份不可修改");
     const exported = backups.filter(({ name }) => name !== "existing-backup.json");
-    expect(exported).toHaveLength(2);
-    expect(exported.find(({ name }) => name.includes("patterns")).size).toBeGreaterThan(2_500_000);
-    for (const { name, raw } of exported) expect(JSON.parse(raw)).toEqual(name.includes("patterns") ? values.patterns : values.functions);
+    expect(exported).toHaveLength(1);
+    expect(exported[0].size).toBeGreaterThan(2_500_000);
+    expect(JSON.parse(exported[0].raw)).toEqual(bundle(values));
     await page.locator("#importAllRecordsInput").setInputFiles(exported.map(({ name, raw }) => ({ name, mimeType: "application/json", buffer: Buffer.from(raw) })));
     await expect(page.locator("#confirmImportAllRecordsButton")).toBeEnabled();
     await page.locator("#confirmImportAllRecordsButton").click();

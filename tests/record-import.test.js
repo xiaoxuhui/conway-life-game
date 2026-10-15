@@ -102,6 +102,8 @@ test("函数 v1 沿用原解析器迁移默认输入", async () => {
   assert.equal(parsed.functions.version, 2);
   assert.equal(parsed.functions.functions[0].code, "NOT(A)");
   assert.deepEqual(parsed.functions.functions[0].inputs, [{ name: "A", defaultValue: 1 }]);
+  const combined = await Import.readFiles([file({ format: "conway-life-record-backup", version: 1, patterns: imported.patterns, functions: legacy })]);
+  assert.deepEqual(combined.functions, parsed.functions);
 });
 
 test("非法文件数、重复类型、坏 JSON 和未知格式均拒绝", async () => {

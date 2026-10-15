@@ -69,7 +69,8 @@ test("配对按钮完成全部导出删除与全部导入恢复，不改变棋�
   await expect(page.locator("#exportAllRecordsDialog")).not.toBeVisible();
   expect((await stored(page)).patterns.patterns).toEqual([]);
   const files = await page.evaluate(() => window.backupFiles);
-  expect(files).toHaveLength(2);
+  expect(files).toHaveLength(1);
+  expect(JSON.parse(files[0].raw)).toEqual({ format: "conway-life-record-backup", version: 1, ...libraries });
   const chooserPromise = page.waitForEvent("filechooser");
   await page.locator("#importAllRecordsButton").click();
   const chooser = await chooserPromise;
@@ -88,7 +89,7 @@ test("配对按钮完成全部导出删除与全部导入恢复，不改变棋�
   expect(await page.locator("#aliveValue").textContent()).toBe(population);
   await page.reload();
   expect(await stored(page)).toEqual(libraries);
-  // 相同两份文件再次选择仍可触发导入，但不重复记录。
+  // 相同合并备份再次选择仍可触发导入，但不重复记录。
   await page.locator(input).setInputFiles(files.map(({ name, raw }) => file(raw, name)));
   await expect(page.locator(summary)).toContainText("预计新增 0 项，跳过 1 项");
   await page.locator(confirm).click();
@@ -124,10 +125,12 @@ for (const collection of ["patterns", "functions"]) {
   });
 }
 
-for (const failure of ["broken", "unknown", "version", "duplicate", "three", "oversized", "read"]) {
+for (const failure of ["broken", "unknown", "version", "duplicate", "three", "oversized", "read",
+  "combined-version", "combined-missing", "combined-pattern", "combined-function", "combined-mixed", "combined-duplicate"]) {
   test(`全部导入 ${failure} 时两库都不写入`, async ({ page }) => {
     await seed(page);
     const valid = file(libraries.patterns);
+    const combined = { format: "conway-life-record-backup", version: 1, ...libraries };
     const invalid = {
       broken: [valid, file("{broken", "broken.json")],
       unknown: [valid, file({ format: "world" })],
@@ -136,6 +139,12 @@ for (const failure of ["broken", "unknown", "version", "duplicate", "three", "ov
       three: [valid, file(libraries.functions), valid],
       oversized: [valid, file(JSON.stringify(libraries.functions) + " ".repeat(100_000))],
       read: [valid, file(libraries.functions)],
+      "combined-version": [file({ ...combined, version: 99 })],
+      "combined-missing": [file({ ...combined, functions: undefined })],
+      "combined-pattern": [file({ ...combined, patterns: { ...libraries.patterns, version: 99 } })],
+      "combined-function": [file({ ...combined, functions: { ...libraries.functions, functions: [{ ...libraries.functions.functions[0], name: "" }] } })],
+      "combined-mixed": [file(combined), valid],
+      "combined-duplicate": [file(combined), file(combined)],
     }[failure];
     if (failure === "read") await page.evaluate(() => { File.prototype.text = async () => { throw new Error("文件读取失败"); }; });
     await page.locator(input).setInputFiles(invalid);
