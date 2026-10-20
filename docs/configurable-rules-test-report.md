@@ -33,4 +33,4 @@
 
 - Two-state sparse infinite world only; B0 and C>2 explicitly unsupported. No claims of arbitrary Generations/multistate support.
 - No Android asset sync/APK, version tag or user data/backup deletion. Existing browser directory-write issue is unrelated and not claimed fixed.
-- All local acceptance checks passed; main merge/push verification pending.
+- All local acceptance checks passed; feature merged and pushed to main. `git ls-remote --heads origin main` matched local `e62781843a81268621a9ed3770de67ce6886a5a7`. This evidence-only follow-up uses the same feature branch/merge/push verification flow before deleting only this branch. Other branches are retained.

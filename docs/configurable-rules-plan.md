@@ -1,6 +1,6 @@
 # Configurable two-state rules
 
-- **Status**: COMPLETE
+- **Status**: VERIFIED
 - **Approved**: 2026-10-20 用户要求添加规则设置，支持 B3/S23、S3/B23/C2 等格式切换。
 - **Type**: feature
 
@@ -18,11 +18,12 @@
 - **Files**: index.html, styles/main.css, scripts/app.js, tests/static-app.test.js, e2e/rules.spec.js.
 - **Evidence**: related Node 24/24 pass; desktop/mobile rules interactions 16/16 pass (24.7s), including held clock/RAF behavior, actual counts, all three notations, archives, errors and logic cancellation. Desktop/mobile screenshots inspected.
 
-## R3 Acceptance and delivery `[COMPLETE]`
+## R3 Acceptance and delivery `[VERIFIED]`
 
 - **Objective**: Verify existing gameplay/backup behavior and document limitations before normal short-branch merge/push/cleanup.
 - **Definition of Done**: All web Node tests (Android excluded), full desktop/mobile Playwright, syntax/lint/diff checks pass; screenshots inspected; remote main checked and preserved, push verified with `git ls-remote` before deleting only this branch.
 - **Files**: README.md, CHANGELOG.md, docs/requirements.md, docs/technical-design.md, docs/configurable-rules-plan.md, docs/configurable-rules-test-report.md.
+- **Evidence**: web Node 161/161, full browser 156/156, syntax/lint/diff pass; push succeeded and remote main exactly matched `e62781843a81268621a9ed3770de67ce6886a5a7`. This evidence-only follow-up is merged/pushed through the same feature branch before cleanup.
 
 ## Boundaries
 
