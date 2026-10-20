@@ -11,13 +11,14 @@
 - **Files**: scripts/life-engine.js, tests/rules.test.js, tools/verify-rules.cjs, package.json.
 - **Evidence**: `node --test tests/rules.test.js`: 6/6 pass. `node tools/verify-rules.cjs`: 22 rules × 512 neighborhoods = 11,264 transitions, all match the independent dense oracle. Before implementation all six new tests failed.
 
-## R2 Settings UI and logic safety `[COMPLETE]`
+## R2 Settings UI and logic safety `[VERIFIED]`
 
 - **Objective**: Explicitly apply/reset a rule, switch display notation without changing active semantics, pause while preserving cells/generation, update summaries/export/import, and prevent Conway-only logic assertions under a custom rule.
 - **Definition of Done**: `node --test tests/static-app.test.js tests/rules.test.js` passes; desktop/mobile `e2e/rules.spec.js` verifies format switching, actual evolution, invalid input, running/undo state, archives and logic guards with no page errors/overflow.
 - **Files**: index.html, styles/main.css, scripts/app.js, tests/static-app.test.js, e2e/rules.spec.js.
+- **Evidence**: related Node 24/24 pass; desktop/mobile rules interactions 16/16 pass (24.7s), including held clock/RAF behavior, actual counts, all three notations, archives, errors and logic cancellation. Desktop/mobile screenshots inspected.
 
-## R3 Acceptance and delivery `[PENDING]`
+## R3 Acceptance and delivery `[COMPLETE]`
 
 - **Objective**: Verify existing gameplay/backup behavior and document limitations before normal short-branch merge/push/cleanup.
 - **Definition of Done**: All web Node tests (Android excluded), full desktop/mobile Playwright, syntax/lint/diff checks pass; screenshots inspected; remote main checked and preserved, push verified with `git ls-remote` before deleting only this branch.

@@ -109,7 +109,7 @@ test("旋转四次和水平翻转两次都恢复原图案", () => {
   assert.deepEqual({ width: flippedTwice.width, height: flippedTwice.height }, { width: original.width, height: original.height });
 });
 
-test("JSON v2 保存有符号坐标与相机并可无损往返", () => {
+test("JSON v3 保存有符号坐标与相机并可无损往返", () => {
   const original = Life.createWorld([[-8, 9], [0, 0], [700, -900]]);
   const view = { centerRow: -2.5, centerColumn: 18.25, cellSize: 3.5 };
   const restored = Life.deserialize(JSON.stringify(Life.serialize(original, 42, view)));
