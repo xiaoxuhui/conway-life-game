@@ -16,7 +16,8 @@
 - `node node_modules/@playwright/test/cli.js test e2e/rules.spec.js --max-failures=2 --output=test-results/rules-focused`: 16/16 pass, 24.7s; desktop Chromium and Pixel 7 viewport.
 - Syntax checks: existing package check command plus `node --check e2e/rules.spec.js` and `node --check tools/verify-rules.cjs`: pass.
 - `node node_modules/eslint/bin/eslint.js scripts`, `git diff --check`: pass.
-- All web Node tests (Android excluded) and full browser suite: pending completion when this report was created.
+- All web Node tests: `$webTestPaths = @(rg --files tests | Where-Object { $_ -notlike '*android-shell*' }); & node --test $webTestPaths`: **161/161 pass**, 128.0s, Node v24.19.0. Android shell tests deliberately excluded.
+- Full browser suite: `node node_modules/@playwright/test/cli.js test --max-failures=2 --output=test-results/full-configurable-rules`: **156/156 pass (2.9m), exit 0**, desktop Chromium and Pixel 7 viewport. Existing backups, imports, single-record operations, logic generation and gameplay smoke remain green.
 
 ## Browser coverage
 
@@ -32,4 +33,4 @@
 
 - Two-state sparse infinite world only; B0 and C>2 explicitly unsupported. No claims of arbitrary Generations/multistate support.
 - No Android asset sync/APK, version tag or user data/backup deletion. Existing browser directory-write issue is unrelated and not claimed fixed.
-- Main merge/push verification pending final acceptance.
+- All local acceptance checks passed; main merge/push verification pending.

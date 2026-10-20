@@ -1,6 +1,6 @@
 # Configurable two-state rules
 
-- **Status**: PENDING
+- **Status**: COMPLETE
 - **Approved**: 2026-10-20 用户要求添加规则设置，支持 B3/S23、S3/B23/C2 等格式切换。
 - **Type**: feature
 
