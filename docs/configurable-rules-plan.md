@@ -4,7 +4,7 @@
 - **Approved**: 2026-10-20 用户要求添加规则设置，支持 B3/S23、S3/B23/C2 等格式切换。
 - **Type**: feature
 
-## R1 Rules engine and world archive `[PENDING]`
+## R1 Rules engine and world archive `[COMPLETE]`
 
 - **Objective**: Parse B/S in either order with optional C2, format three notations, evolve with explicit rules and preserve rules in v3 world archives while reading v1/v2 as Conway.
 - **Definition of Done**: `node --test tests/rules.test.js` and `node tools/verify-rules.cjs` pass; enumerate all 512 3×3 neighborhoods against an independent dense oracle, including every supported birth/survival neighbor count.

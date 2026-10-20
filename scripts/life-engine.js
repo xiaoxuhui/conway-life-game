@@ -6,11 +6,50 @@
   "use strict";
 
   const FORMAT = "conway-life-game";
-  const FORMAT_VERSION = 2;
+  const FORMAT_VERSION = 3;
+  const PREVIOUS_VERSION = 2;
   const LEGACY_VERSION = 1;
   const MAX_LEGACY_DIMENSION = 250;
   const MAX_COORDINATE = Number.MAX_SAFE_INTEGER - 2;
   const DEFAULT_VIEW = Object.freeze({ centerRow: 0, centerColumn: 0, cellSize: 16 });
+  const DEFAULT_RULE = "B3/S23";
+  const ruleCache = new Map();
+
+  function parseRule(input) {
+    if (typeof input !== "string" || input.length > 64) throw new TypeError("规则须为不超过 64 字符的 B3/S23 或 S23/B3/C2 写法");
+    const text = input.replace(/\s/g, "").toUpperCase();
+    if (ruleCache.has(text)) return ruleCache.get(text);
+    const parts = text.split("/");
+    if (parts.length < 2 || parts.length > 3) throw new TypeError("规则必须包含 B 出生条件与 S 存活条件，可附加 C2");
+    const fields = new Map();
+    for (const part of parts) {
+      const match = /^([BS])([0-8]*)$/.exec(part) || /^(C)(\d+)$/.exec(part);
+      if (!match) throw new TypeError("规则只允许 B/S、邻居数 0–8 和可选 C2");
+      const [, type, values] = match;
+      if (fields.has(type)) throw new TypeError("规则字段不能重复");
+      if (type === "C") {
+        if (values !== "2") throw new RangeError("目前仅支持两状态 C2，不支持多状态规则");
+      } else if (new Set(values).size !== values.length) throw new TypeError("邻居数不能重复");
+      fields.set(type, [...values].sort().join(""));
+    }
+    if (!fields.has("B") || !fields.has("S")) throw new TypeError("规则必须同时包含 B 和 S");
+    const birth = fields.get("B");
+    const survival = fields.get("S");
+    if (birth.includes("0")) throw new RangeError("无限稀疏棋盘暂不支持 B0：空白区域会产生无限个细胞");
+    const mask = (values) => [...values].reduce((bits, digit) => bits | (1 << Number(digit)), 0);
+    const rule = Object.freeze({ birth, survival, states: 2, canonical: `B${birth}/S${survival}`, birthMask: mask(birth), survivalMask: mask(survival) });
+    if (ruleCache.size >= 64) ruleCache.delete(ruleCache.keys().next().value);
+    ruleCache.set(text, rule);
+    return rule;
+  }
+
+  function formatRule(input, notation = "bs") {
+    const { birth, survival } = parseRule(input);
+    if (notation === "bs") return `B${birth}/S${survival}`;
+    if (notation === "sb") return `S${survival}/B${birth}`;
+    if (notation === "sbc") return `S${survival}/B${birth}/C2`;
+    throw new RangeError("不支持的规则显示格式");
+  }
 
   function assertInteger(value, name, minimum, maximum) {
     if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
@@ -83,8 +122,9 @@
     return world.cells.size;
   }
 
-  function nextCellSet(cells) {
+  function nextCellSet(cells, rule = DEFAULT_RULE) {
     if (!(cells instanceof Set)) throw new TypeError("活细胞集合无效");
+    const { birthMask, survivalMask } = parseRule(rule);
     const neighborCounts = new Map();
 
     for (const key of cells) {
@@ -104,14 +144,14 @@
 
     const next = new Set();
     for (const [key, count] of neighborCounts) {
-      if (count === 3 || (count === 2 && cells.has(key))) next.add(key);
+      if ((cells.has(key) ? survivalMask : birthMask) & (1 << count)) next.add(key);
     }
     return next;
   }
 
-  function nextGeneration(world) {
+  function nextGeneration(world, rule = DEFAULT_RULE) {
     assertWorld(world);
-    return { cells: nextCellSet(world.cells) };
+    return { cells: nextCellSet(world.cells, rule) };
   }
 
   function randomWorld(rows = 40, columns = 60, density = 0.25, random = Math.random, centerRow = 0, centerColumn = 0) {
@@ -188,12 +228,13 @@
     return { centerRow, centerColumn, cellSize };
   }
 
-  function serialize(world, generation = 0, view = DEFAULT_VIEW) {
+  function serialize(world, generation = 0, view = DEFAULT_VIEW, rule = DEFAULT_RULE) {
     assertWorld(world);
     assertInteger(generation, "代数", 0, Number.MAX_SAFE_INTEGER);
     return {
       format: FORMAT,
       version: FORMAT_VERSION,
+      rule: parseRule(rule).canonical,
       generation,
       alive: aliveCoordinates(world),
       view: normalizeView(view),
@@ -212,7 +253,8 @@
     const data = parseInput(input);
     if (!data || typeof data !== "object" || Array.isArray(data)) throw new TypeError("文件内容必须是一个对象");
     if (data.format !== FORMAT) throw new TypeError("文件格式不受支持");
-    if (![LEGACY_VERSION, FORMAT_VERSION].includes(data.version)) throw new RangeError("文件版本不受支持");
+    if (![LEGACY_VERSION, PREVIOUS_VERSION, FORMAT_VERSION].includes(data.version)) throw new RangeError("文件版本不受支持");
+    const rule = data.version === FORMAT_VERSION ? parseRule(data.rule).canonical : DEFAULT_RULE;
     assertInteger(data.generation, "代数", 0, Number.MAX_SAFE_INTEGER);
     if (!Array.isArray(data.alive)) throw new TypeError("活细胞坐标列表无效");
 
@@ -227,6 +269,7 @@
       }
       return {
         world: createWorld(data.alive),
+        rule,
         generation: data.generation,
         view: { centerRow: data.rows / 2, centerColumn: data.columns / 2, cellSize: DEFAULT_VIEW.cellSize },
         migratedFrom: LEGACY_VERSION,
@@ -235,6 +278,7 @@
 
     return {
       world: createWorld(data.alive),
+      rule,
       generation: data.generation,
       view: normalizeView(data.view || DEFAULT_VIEW),
       migratedFrom: null,
@@ -242,6 +286,7 @@
   }
 
   return Object.freeze({
+    DEFAULT_RULE,
     DEFAULT_VIEW,
     FORMAT,
     FORMAT_VERSION,
@@ -253,9 +298,11 @@
     countAlive,
     createWorld,
     deserialize,
+    formatRule,
     isAlive,
     nextCellSet,
     nextGeneration,
+    parseRule,
     placePattern,
     randomWorld,
     serialize,
