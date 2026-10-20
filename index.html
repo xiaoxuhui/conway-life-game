@@ -29,7 +29,7 @@
   <div class="app-shell">
     <header class="app-header">
       <div>
-        <p class="eyebrow">CELLULAR AUTOMATON · B3/S23</p>
+        <p class="eyebrow">CELLULAR AUTOMATON · <span id="activeRule">B3/S23</span></p>
         <h1>康威生命游戏</h1>
         <p class="subtitle">在一张没有边界的画布上，观察简单规则如何长出复杂世界。</p>
       </div>
@@ -120,6 +120,23 @@
           <button class="button" id="exportButton" type="button" disabled>导出</button>
         </div>
 
+        <form class="control-group rule-controls" id="ruleForm" novalidate>
+          <label class="select-label" for="ruleInput">演化规则</label>
+          <div class="rule-input-row">
+            <input id="ruleInput" type="text" value="B3/S23" maxlength="64" spellcheck="false" autocomplete="off" aria-describedby="ruleHelp ruleError">
+            <select id="ruleNotationSelect" aria-label="规则显示格式">
+              <option value="bs">B…/S…</option>
+              <option value="sb">S…/B…</option>
+              <option value="sbc">S…/B…/C2</option>
+            </select>
+            <button class="button" id="applyRuleButton" type="submit">应用规则</button>
+            <button class="button" id="resetRuleButton" type="button">恢复康威规则</button>
+          </div>
+          <p class="field-note" id="ruleHelp">B 表示出生，S 表示存活，数字是活邻居数。支持 B3/S23、S3/B23/C2 等写法；切换格式不自动应用。仅支持 C2，暂不支持 B0。</p>
+          <p class="dialog-error" id="ruleError" role="alert" hidden></p>
+          <p class="field-note" id="ruleNotice" role="status" aria-live="polite">当前为康威规则，逻辑电路可正常验证。</p>
+        </form>
+
         <form class="control-group logic-code-controls" id="logicCodeForm" novalidate>
           <div class="control-heading">
             <label for="logicCodeInput">逻辑代码</label>
@@ -182,13 +199,13 @@
       <section class="rules-card" aria-labelledby="rulesTitle">
         <div>
           <p class="section-kicker">RULESET</p>
-          <h2 id="rulesTitle">四条规则，一个宇宙</h2>
+          <h2 id="rulesTitle">当前生效规则</h2>
         </div>
         <div class="rule-grid">
-          <div class="rule"><strong>&lt; 2</strong><span>孤独，死亡</span></div>
-          <div class="rule"><strong>2–3</strong><span>活细胞存活</span></div>
-          <div class="rule"><strong>&gt; 3</strong><span>拥挤，死亡</span></div>
-          <div class="rule accent-rule"><strong>= 3</strong><span>死细胞诞生</span></div>
+          <div class="rule accent-rule"><strong id="ruleBirth">3</strong><span>死细胞出生的活邻居数</span></div>
+          <div class="rule"><strong id="ruleSurvival">2、3</strong><span>活细胞存活的活邻居数</span></div>
+          <div class="rule"><strong>其余</strong><span>活细胞死亡</span></div>
+          <div class="rule"><strong>C2</strong><span>两状态：生 / 死</span></div>
         </div>
       </section>
     </main>

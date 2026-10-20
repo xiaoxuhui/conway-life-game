@@ -19,6 +19,15 @@ test("页面本地资源缓存版本与项目版本一致", () => {
   }
 });
 
+test("规则设置支持三种显示格式、明确应用和动态摘要", () => {
+  for (const id of ["ruleForm", "ruleInput", "ruleNotationSelect", "applyRuleButton", "resetRuleButton", "ruleError", "ruleNotice", "activeRule", "ruleBirth", "ruleSurvival"]) {
+    assert.ok(html.includes(`id="${id}"`), `缺少 ${id}`);
+  }
+  for (const notation of ["bs", "sb", "sbc"]) assert.ok(html.includes(`value="${notation}"`));
+  assert.match(appSource, /Life\.nextGeneration\(state\.world\.cells, state\.world\.rule\)/);
+  assert.match(appSource, /state\.world\.rule = restored\.rule/);
+});
+
 test("页面包含全部核心控件", () => {
   for (const id of [
     "lifeCanvas",

@@ -16,6 +16,15 @@
   const ZOOM_STEP = 1.5;
 
   const elements = {
+    ruleForm: document.querySelector("#ruleForm"),
+    ruleInput: document.querySelector("#ruleInput"),
+    ruleNotation: document.querySelector("#ruleNotationSelect"),
+    ruleError: document.querySelector("#ruleError"),
+    ruleNotice: document.querySelector("#ruleNotice"),
+    resetRule: document.querySelector("#resetRuleButton"),
+    activeRule: document.querySelector("#activeRule"),
+    ruleBirth: document.querySelector("#ruleBirth"),
+    ruleSurvival: document.querySelector("#ruleSurvival"),
     actualSpeed: document.querySelector("#actualSpeedValue"),
     alive: document.querySelector("#aliveValue"),
     boardHint: document.querySelector("#boardHint"),
@@ -133,6 +142,7 @@
   // 便于维护；所有访问点已同步改为 state.<group>.<field>，行为与原扁平结构完全一致。
   const state = {
     world: {
+      rule: Life.DEFAULT_RULE,
       cells: Life.createWorld(),
       generation: 0,
       running: false,
@@ -254,6 +264,14 @@
   }
 
   function render() {
+    const rule = Life.parseRule(state.world.rule);
+    elements.activeRule.textContent = Life.formatRule(state.world.rule, elements.ruleNotation.value);
+    elements.ruleBirth.textContent = [...rule.birth].join("、") || "无";
+    elements.ruleSurvival.textContent = [...rule.survival].join("、") || "无";
+    elements.ruleNotice.textContent = state.world.rule === Life.DEFAULT_RULE
+      ? "当前为康威规则，逻辑电路可正常验证。"
+      : "当前为自定义规则：内置图案的行为可能改变；逻辑电路仅适用于 B3/S23，已停用生成与输出锁存。";
+    elements.logicCodeButton.disabled = state.world.rule !== Life.DEFAULT_RULE && !state.dialogs.logicGenerationController;
     const alive = Life.countAlive(state.world.cells);
     renderer.draw(state.world.cells, state.world.camera, state.world.running, state.dialogs.placement, logicAnnotations());
     elements.generation.textContent = formatNumber(state.world.generation);
@@ -280,7 +298,7 @@
     elements.flipPattern.disabled = !state.dialogs.placement;
     elements.canvas.setAttribute(
       "aria-label",
-      `无限大的康威生命游戏世界；视图中心列 ${formatCoordinate(state.world.camera.centerColumn)}、行 ${formatCoordinate(state.world.camera.centerRow)}；第 ${state.world.generation} 代，${alive} 个活细胞，${state.dialogs.placement ? `正在放置${state.dialogs.placement.pattern.name}` : state.world.running ? "正在运行" : "已暂停"}${state.world.logicOutputs.length ? `；逻辑输出：${logicOutputSummary()}` : ""}。`,
+      `无限大的康威生命游戏世界；规则 ${state.world.rule}；视图中心列 ${formatCoordinate(state.world.camera.centerColumn)}、行 ${formatCoordinate(state.world.camera.centerRow)}；第 ${state.world.generation} 代，${alive} 个活细胞，${state.dialogs.placement ? `正在放置${state.dialogs.placement.pattern.name}` : state.world.running ? "正在运行" : "已暂停"}${state.world.logicOutputs.length ? `；逻辑输出：${logicOutputSummary()}` : ""}。`,
     );
     elements.boardHint.textContent = state.dialogs.placement
       ? "拖动预览，松开或单击放置；R 旋转 · F 翻转 · Esc 完成。"
@@ -312,7 +330,7 @@
 
   function evolveOneGeneration() {
     if (state.dialogs.placement) state.dialogs.placement = null;
-    state.world.cells = Life.nextGeneration(state.world.cells);
+    state.world.cells = Life.nextGeneration(state.world.cells, state.world.rule);
     state.world.generation += 1;
     updateLogicOutputs();
   }
@@ -510,6 +528,56 @@
   function setLogicGenerationState(running) {
     elements.logicCodeForm.setAttribute("aria-busy", String(running));
     elements.logicCodeButton.textContent = running ? "取消生成" : "生成结构";
+    elements.logicCodeButton.disabled = !running && state.world.rule !== Life.DEFAULT_RULE;
+  }
+
+  function clearRuleError() {
+    elements.ruleError.textContent = "";
+    elements.ruleError.hidden = true;
+    elements.ruleInput.setAttribute("aria-invalid", "false");
+  }
+
+  function syncRuleDraft() {
+    elements.ruleInput.value = Life.formatRule(state.world.rule, elements.ruleNotation.value);
+    clearRuleError();
+  }
+
+  function showRuleError(error) {
+    elements.ruleError.textContent = error.message;
+    elements.ruleError.hidden = false;
+    elements.ruleInput.setAttribute("aria-invalid", "true");
+  }
+
+  function cancelLogicForRuleChange() {
+    const controller = state.dialogs.logicGenerationController;
+    state.dialogs.logicGenerationController = null;
+    if (controller) controller.abort();
+    setLogicGenerationState(false);
+    setLogicCodeFeedback();
+    state.dialogs.placement = null;
+    state.world.logicOutputs = [];
+    state.world.undoSnapshot = null;
+  }
+
+  function applyRule(event) {
+    event.preventDefault();
+    let rule;
+    try { rule = Life.parseRule(elements.ruleInput.value); }
+    catch (error) { showRuleError(error); return; }
+    stop();
+    state.world.rule = rule.canonical;
+    cancelLogicForRuleChange();
+    syncRuleDraft();
+    render();
+    showToast(`已应用 ${rule.canonical}，演化已暂停，当前细胞与代数已保留。`);
+  }
+
+  function changeRuleNotation() {
+    try {
+      elements.ruleInput.value = Life.formatRule(elements.ruleInput.value, elements.ruleNotation.value);
+      clearRuleError();
+    } catch (error) { showRuleError(error); }
+    render();
   }
 
   function logicGenerationProgress(controller, progress) {
@@ -556,6 +624,10 @@
       setLogicCodeFeedback("正在取消生成…", "progress");
       return;
     }
+    if (state.world.rule !== Life.DEFAULT_RULE) {
+      setLogicCodeFeedback("逻辑电路只适用于 B3/S23，请先恢复康威规则。", "error");
+      return;
+    }
     const controller = new AbortController();
     state.dialogs.logicGenerationController = controller;
     setLogicGenerationState(true);
@@ -585,6 +657,7 @@
       render();
       showToast(`代码已识别：${command.expression}。请在观察区选择位置。`, { duration: 5000 });
     } catch (error) {
+      if (state.dialogs.logicGenerationController !== controller) return;
       if (error?.code === "ABORTED") {
         setLogicCodeFeedback("已取消生成；当前世界没有改变。", "");
       } else {
@@ -635,7 +708,7 @@
 
   function exportWorld() {
     if (Life.countAlive(state.world.cells) === 0) return;
-    const contents = JSON.stringify(Life.serialize(state.world.cells, state.world.generation, state.world.camera), null, 2);
+    const contents = JSON.stringify(Life.serialize(state.world.cells, state.world.generation, state.world.camera, state.world.rule), null, 2);
     const blob = new Blob([contents], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -645,7 +718,7 @@
     anchor.click();
     anchor.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 0);
-    showToast("世界与当前视图已导出");
+    showToast("世界、规则与当前视图已导出");
   }
 
   async function importWorld(file) {
@@ -657,6 +730,9 @@
     try {
       const restored = Life.deserialize(await file.text());
       stop();
+      state.world.rule = restored.rule;
+      cancelLogicForRuleChange();
+      syncRuleDraft();
       state.dialogs.placement = null;
       state.world.cells = restored.world;
       state.world.generation = restored.generation;
@@ -719,7 +795,7 @@
         false,
       );
       state.world.generation = 0;
-      const logic = state.dialogs.placement.pattern.logic;
+      const logic = state.world.rule === Life.DEFAULT_RULE ? state.dialogs.placement.pattern.logic : null;
       if (logic) {
         state.world.logicOutputs.push({
           row: state.dialogs.placement.row,
@@ -988,6 +1064,13 @@
     if (!elements.importAllRecordsDialog.open) Dialog.resetAllRecordsImport();
   });
   elements.step.addEventListener("click", advance);
+  elements.ruleForm.addEventListener("submit", applyRule);
+  elements.ruleNotation.addEventListener("change", changeRuleNotation);
+  elements.ruleInput.addEventListener("input", clearRuleError);
+  elements.resetRule.addEventListener("click", () => {
+    elements.ruleInput.value = Life.DEFAULT_RULE;
+    elements.ruleForm.requestSubmit();
+  });
   elements.clear.addEventListener("click", clearWorld);
   elements.random.addEventListener("click", fillRandom);
   elements.undo.addEventListener("click", undoClear);

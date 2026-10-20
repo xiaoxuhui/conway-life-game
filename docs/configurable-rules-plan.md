@@ -4,13 +4,14 @@
 - **Approved**: 2026-10-20 用户要求添加规则设置，支持 B3/S23、S3/B23/C2 等格式切换。
 - **Type**: feature
 
-## R1 Rules engine and world archive `[COMPLETE]`
+## R1 Rules engine and world archive `[VERIFIED]`
 
 - **Objective**: Parse B/S in either order with optional C2, format three notations, evolve with explicit rules and preserve rules in v3 world archives while reading v1/v2 as Conway.
 - **Definition of Done**: `node --test tests/rules.test.js` and `node tools/verify-rules.cjs` pass; enumerate all 512 3×3 neighborhoods against an independent dense oracle, including every supported birth/survival neighbor count.
 - **Files**: scripts/life-engine.js, tests/rules.test.js, tools/verify-rules.cjs, package.json.
+- **Evidence**: `node --test tests/rules.test.js`: 6/6 pass. `node tools/verify-rules.cjs`: 22 rules × 512 neighborhoods = 11,264 transitions, all match the independent dense oracle. Before implementation all six new tests failed.
 
-## R2 Settings UI and logic safety `[PENDING]`
+## R2 Settings UI and logic safety `[COMPLETE]`
 
 - **Objective**: Explicitly apply/reset a rule, switch display notation without changing active semantics, pause while preserving cells/generation, update summaries/export/import, and prevent Conway-only logic assertions under a custom rule.
 - **Definition of Done**: `node --test tests/static-app.test.js tests/rules.test.js` passes; desktop/mobile `e2e/rules.spec.js` verifies format switching, actual evolution, invalid input, running/undo state, archives and logic guards with no page errors/overflow.
