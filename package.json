@@ -34,7 +34,7 @@
     "lint": "eslint scripts"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.64.1",
     "eslint": "^10.8.0"
   }
 }
