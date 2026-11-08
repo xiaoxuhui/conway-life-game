@@ -52,10 +52,13 @@ test("棋盘实际重现才显示循环节，编辑和换规则后重新检测",
   await expect(period).toBeHidden();
   await importWorld(page, blink);
   await expect(page.locator("#generationValue")).toHaveText("7");
-  await page.locator("#speedInput").fill("1000");
+  const speed = page.locator("#speedInput");
+  await speed.fill("20000");
   await page.locator("#runToggle").click();
+  await expect(speed).toHaveValue("10000");
   await expect(period).toHaveText("2 代");
   await expect(page.locator("#statusText")).toHaveText("演化中");
+  await expect.poll(async () => Number((await page.locator("#actualSpeedValue").textContent()).replace(/\D/g, ""))).toBeGreaterThan(1000);
   await page.locator("#runToggle").click();
   await expect(period).toHaveText("2 代");
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
