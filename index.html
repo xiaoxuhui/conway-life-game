@@ -11,6 +11,7 @@
   <script defer src="scripts/life-engine.js?v=0.17.0"></script>
   <script defer src="scripts/presets.js?v=0.17.0"></script>
   <script defer src="scripts/pattern-library.js?v=0.17.0"></script>
+  <script defer src="scripts/golly-import.js?v=0.17.0"></script>
   <script defer src="scripts/speed-control.js?v=0.17.0"></script>
   <script defer src="scripts/logic-parse.js?v=0.17.0"></script>
   <script defer src="scripts/logic-expand.js?v=0.17.0"></script>
@@ -189,7 +190,11 @@
             <p class="section-kicker" id="worldPosition">WORLD ∞ · CENTER 0, 0</p>
             <h2 id="boardTitle">生命观察区</h2>
           </div>
-          <p id="boardHint">左键绘制；中键、右键或按住空格拖动；滚轮缩放。</p>
+          <div class="board-actions">
+            <button class="button" id="importGollyButton" type="button">导入 Golly 图案</button>
+            <input id="importGollyInput" type="file" accept=".rle,.mc,.gz" hidden>
+            <p id="boardHint">左键绘制；中键、右键或按住空格拖动；滚轮缩放。</p>
+          </div>
         </div>
 
         <div class="board-frame" id="boardFrame">

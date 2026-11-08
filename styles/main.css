@@ -542,7 +542,13 @@ select {
   padding: 2px 3px 15px;
 }
 
-.board-heading p:last-child {
+.board-actions {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+}
+
+.board-actions p {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.82rem;
@@ -1020,8 +1026,12 @@ noscript {
     padding: 4px 4px 12px;
   }
 
-  .board-heading p:last-child {
+  .board-actions {
     margin-top: 8px;
+    justify-items: start;
+  }
+
+  .board-actions p {
     text-align: left;
   }
 
