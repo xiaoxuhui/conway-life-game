@@ -69,3 +69,22 @@ test("五万以上活细胞可以预览、旋转并放置，超出展开预算�
   await expect(page.locator("#toastMessage")).toContainText("网页棋盘最多可展开 200 万个活细胞");
   await expect(page.locator("#aliveValue")).toHaveText("50,200");
 });
+
+test("取消分批放置会保留原棋盘", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"));
+  await page.goto("/");
+  const canvas = page.locator("#lifeCanvas");
+  await canvas.click({ position: { x: 40, y: 40 } });
+  await expect(page.locator("#aliveValue")).toHaveText("1");
+  const large = "x=500,y=400\n" + Array(400).fill("500o").join("$") + "!";
+  await choosePattern(page, "cancel.rle", Buffer.from(large));
+  await expect(canvas).toHaveAttribute("aria-label", /正在放置cancel/);
+  await canvas.click();
+  await expect(canvas).toHaveAttribute("aria-busy", "true");
+  await page.keyboard.press("Escape");
+  await page.clock.runFor(20);
+  await expect(canvas).not.toHaveAttribute("aria-busy", "true");
+  await expect(page.locator("#aliveValue")).toHaveText("1");
+  await expect(page.locator("#statusText")).toHaveText("已暂停");
+});
