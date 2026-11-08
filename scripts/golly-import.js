@@ -1,17 +1,30 @@
 (function exposeGollyImport(root, factory) {
   if (typeof module === "object" && module.exports) {
-    module.exports = factory(require("./life-engine.js"), require("./pattern-library.js"));
+    module.exports = factory(require("./life-engine.js"));
   } else {
-    root.GollyImport = factory(root.LifeEngine, root.PatternLibrary);
+    root.GollyImport = factory(root.LifeEngine);
   }
-})(globalThis, function createGollyImport(Life, PatternLibrary) {
+})(globalThis, function createGollyImport(Life) {
   "use strict";
 
   const MAX_BYTES = 4_000_000;
-  const MAX_CELLS = PatternLibrary.MAX_PATTERN_CELLS;
+  // The board still stores each live coordinate as a separate Set entry.
+  const MAX_BOARD_CELLS = 2_000_000;
+  const PLACEMENT_CHUNK = 4096;
 
-  function checkPopulation(count) {
-    if (count > MAX_CELLS) throw new Error("图案最多支持 5 万个活细胞");
+  function checkBoardCapacity(count) {
+    if (count > MAX_BOARD_CELLS) throw new Error("图案已读取，但网页棋盘最多可展开 200 万个活细胞");
+  }
+
+  function emptyBounds() {
+    return { minRow: Infinity, minColumn: Infinity, maxRow: -Infinity, maxColumn: -Infinity };
+  }
+
+  function includeBounds(bounds, minRow, minColumn, maxRow, maxColumn) {
+    bounds.minRow = Math.min(bounds.minRow, minRow);
+    bounds.minColumn = Math.min(bounds.minColumn, minColumn);
+    bounds.maxRow = Math.max(bounds.maxRow, maxRow);
+    bounds.maxColumn = Math.max(bounds.maxColumn, maxColumn);
   }
 
   function readRule(rule) {
@@ -30,7 +43,9 @@
     const rule = readRule(fields[1] || commentRule);
     const body = lines.join("\n");
     const token = /\s+|!|([1-9]\d*)?([bo.A$])/gy;
-    const cells = [];
+    const runs = [];
+    const bounds = emptyBounds();
+    let population = 0n;
     let row = 0;
     let column = 0;
     while (token.lastIndex < body.length) {
@@ -50,18 +65,35 @@
         const nextColumn = column + count;
         if (nextColumn > Life.MAX_COORDINATE) throw new Error("RLE 图案坐标超出范围");
         if (symbol === "o" || symbol === "A") {
-          checkPopulation(cells.length + count);
-          for (; column < nextColumn; column += 1) cells.push([row, column]);
+          runs.push([row, column, nextColumn - 1]);
+          includeBounds(bounds, row, column, row, nextColumn - 1);
+          population += BigInt(count);
         }
         column = nextColumn;
       }
       if (row > Life.MAX_COORDINATE) throw new Error("RLE 图案坐标超出范围");
     }
-    return { cells, rule };
+    function* read(view) {
+      let first = 0;
+      let end = runs.length;
+      while (first < end) {
+        const middle = Math.floor((first + end) / 2);
+        if (runs[middle][0] < view.minRow) first = middle + 1;
+        else end = middle;
+      }
+      for (let index = first; index < runs.length; index += 1) {
+        const [row, left, right] = runs[index];
+        if (row > view.maxRow) break;
+        const last = Math.min(right, view.maxColumn);
+        for (let column = Math.max(left, view.minColumn); column <= last; column += 1) yield [row, column];
+      }
+    }
+    return { population, rule, bounds, read };
   }
 
   function macrocellLeaf(line) {
     const cells = [];
+    const bounds = emptyBounds();
     let row = 0;
     let column = 0;
     for (const symbol of line) {
@@ -69,13 +101,16 @@
         row += 1;
         column = 0;
       } else if ((symbol === "." || symbol === "*") && row < 8 && column < 8) {
-        if (symbol === "*") cells.push([row, column]);
+        if (symbol === "*") {
+          cells.push([row, column]);
+          includeBounds(bounds, row, column, row, column);
+        }
         column += 1;
       } else {
         throw new Error("Macrocell 的 8×8 节点无效");
       }
     }
-    return { level: 3, count: cells.length, cells };
+    return { level: 3, population: BigInt(cells.length), cells, bounds };
   }
 
   function parseMacrocell(lines, ruleText) {
@@ -91,27 +126,89 @@
       if (level < 4 || level > 52 || children.some((id) => id >= nodes.length || (id && nodes[id].level !== level - 1))) {
         throw new Error("Macrocell 节点层级或引用无效，图案须为两状态");
       }
-      const count = children.reduce((total, id) => total + (nodes[id]?.count ?? 0), 0);
-      nodes.push({ level, count: Math.min(count, MAX_CELLS + 1), children });
+      const bounds = emptyBounds();
+      const half = 2 ** (level - 1);
+      let population = 0n;
+      for (const [index, id] of children.entries()) {
+        const child = nodes[id];
+        if (!child?.population) continue;
+        population += child.population;
+        const row = (index >> 1) * half;
+        const column = (index & 1) * half;
+        includeBounds(bounds, row + child.bounds.minRow, column + child.bounds.minColumn,
+          row + child.bounds.maxRow, column + child.bounds.maxColumn);
+      }
+      nodes.push({ level, population, bounds, children, half });
     }
 
     const root = nodes.at(-1);
-    checkPopulation(root?.count ?? 0);
-    const cells = [];
-    function collect(node, row, column) {
-      if (!node?.count) return;
+    function* collect(node, row, column, view) {
+      if (!node?.population
+        || row + node.bounds.maxRow < view.minRow || row + node.bounds.minRow > view.maxRow
+        || column + node.bounds.maxColumn < view.minColumn || column + node.bounds.minColumn > view.maxColumn) return;
       if (node.cells) {
-        for (const [y, x] of node.cells) cells.push([row + y, column + x]);
+        for (const [y, x] of node.cells) {
+          const absoluteRow = row + y;
+          const absoluteColumn = column + x;
+          if (absoluteRow >= view.minRow && absoluteRow <= view.maxRow
+            && absoluteColumn >= view.minColumn && absoluteColumn <= view.maxColumn) yield [absoluteRow, absoluteColumn];
+        }
         return;
       }
-      const half = 2 ** (node.level - 1);
-      collect(nodes[node.children[0]], row, column);
-      collect(nodes[node.children[1]], row, column + half);
-      collect(nodes[node.children[2]], row + half, column);
-      collect(nodes[node.children[3]], row + half, column + half);
+      for (const [index, id] of node.children.entries()) {
+        yield* collect(nodes[id], row + (index >> 1) * node.half, column + (index & 1) * node.half, view);
+      }
     }
-    collect(root, 0, 0);
-    return { cells, rule };
+    return {
+      population: root?.population ?? 0n,
+      rule,
+      bounds: root?.bounds,
+      read: (view) => collect(root, 0, 0, view),
+    };
+  }
+
+  function createPattern(name, source, swapped = false, reverseRow = false, reverseColumn = false) {
+    const { minRow: top, minColumn: left, maxRow, maxColumn } = source.bounds;
+    const width = swapped ? maxRow - top + 1 : maxColumn - left + 1;
+    const height = swapped ? maxColumn - left + 1 : maxRow - top + 1;
+
+    function* cellsIn(view = { minRow: 0, maxRow: height - 1, minColumn: 0, maxColumn: width - 1 }) {
+      const viewTop = Math.max(0, view.minRow);
+      const viewBottom = Math.min(height - 1, view.maxRow);
+      const viewLeft = Math.max(0, view.minColumn);
+      const viewRight = Math.min(width - 1, view.maxColumn);
+      if (viewTop > viewBottom || viewLeft > viewRight) return;
+      const rowStart = reverseRow ? height - 1 - viewBottom : viewTop;
+      const rowEnd = reverseRow ? height - 1 - viewTop : viewBottom;
+      const columnStart = reverseColumn ? width - 1 - viewRight : viewLeft;
+      const columnEnd = reverseColumn ? width - 1 - viewLeft : viewRight;
+      for (const [row, column] of source.read({
+        minRow: top + (swapped ? columnStart : rowStart),
+        maxRow: top + (swapped ? columnEnd : rowEnd),
+        minColumn: left + (swapped ? rowStart : columnStart),
+        maxColumn: left + (swapped ? rowEnd : columnEnd),
+      })) {
+        const y = swapped ? column - left : row - top;
+        const x = swapped ? row - top : column - left;
+        yield [reverseRow ? height - 1 - y : y, reverseColumn ? width - 1 - x : x];
+      }
+    }
+
+    return Object.defineProperties({
+      name,
+      rule: source.rule,
+      get cells() {
+        checkBoardCapacity(source.population);
+        return [...cellsIn()];
+      },
+      width,
+      height,
+    }, {
+      cellCount: { value: source.population },
+      cellsIn: { value: cellsIn },
+      rotate: { value: () => createPattern(name, source, !swapped, reverseColumn, !reverseRow) },
+      flip: { value: () => createPattern(name, source, swapped, reverseRow, !reverseColumn) },
+    });
   }
 
   function parsePattern(text, fallbackName = "Golly 图案") {
@@ -130,25 +227,23 @@
     else if (/^x\s*=/i.test(header)) parsed = parseRle(header, data, commentRule);
     else throw new Error("请选择 Golly 的 RLE 或 Macrocell 图案文件");
 
-    const { cells, rule } = parsed;
-    if (!cells.length) throw new Error("图案没有活细胞");
-    let minRow = Infinity;
-    let minColumn = Infinity;
-    let maxRow = 0;
-    let maxColumn = 0;
-    for (const [row, column] of cells) {
-      minRow = Math.min(minRow, row);
-      minColumn = Math.min(minColumn, column);
-      maxRow = Math.max(maxRow, row);
-      maxColumn = Math.max(maxColumn, column);
+    if (!parsed.population) throw new Error("图案没有活细胞");
+    return createPattern((name || fallbackName).slice(0, 80), parsed);
+  }
+
+  async function placePattern(world, pattern, offsetRow, offsetColumn, isCurrent = () => true) {
+    checkBoardCapacity(pattern.cellCount);
+    const placed = Life.cloneWorld(world);
+    let processed = 0;
+    for (const [row, column] of pattern.cellsIn()) {
+      Life.setCell(placed, offsetRow + row, offsetColumn + column, true);
+      if (++processed % PLACEMENT_CHUNK !== 0) continue;
+      checkBoardCapacity(placed.cells.size);
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+      if (!isCurrent()) return null;
     }
-    return {
-      name: (name || fallbackName).slice(0, 80),
-      rule,
-      cells: cells.map(([row, column]) => [row - minRow, column - minColumn]),
-      width: maxColumn - minColumn + 1,
-      height: maxRow - minRow + 1,
-    };
+    checkBoardCapacity(placed.cells.size);
+    return isCurrent() ? placed : null;
   }
 
   async function readGzip(file) {
@@ -181,5 +276,5 @@
     return parsePattern(text, name || "Golly 图案");
   }
 
-  return { parsePattern, readFile };
+  return { parsePattern, readFile, placePattern };
 });

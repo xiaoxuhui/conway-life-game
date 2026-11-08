@@ -52,3 +52,20 @@ test("离线页面能读取压缩 Macrocell，错误规则保留原有预览", a
   await expect(canvas).toHaveAttribute("aria-label", /已暂停/);
   await expect(page.locator("#aliveValue")).toHaveText("0");
 });
+
+test("五万以上活细胞可以预览、旋转并放置，超出展开预算仍可读取", async ({ page }) => {
+  await page.goto("/");
+  const canvas = page.locator("#lifeCanvas");
+  const dense = "x=251,y=200,rule=B3/S23\n" + Array(200).fill("251o").join("$") + "!";
+  await choosePattern(page, "large.rle", Buffer.from(dense));
+  await expect(canvas).toHaveAttribute("aria-label", /正在放置large/);
+  await page.keyboard.press("R");
+  await canvas.click();
+  await expect(page.locator("#aliveValue")).toHaveText("50,200");
+
+  await choosePattern(page, "huge.rle", Buffer.from("x=3000000,y=1,rule=B3/S23\n3000000o!"));
+  await expect(canvas).toHaveAttribute("aria-label", /正在放置huge/);
+  await canvas.click();
+  await expect(page.locator("#toastMessage")).toContainText("网页棋盘最多可展开 200 万个活细胞");
+  await expect(page.locator("#aliveValue")).toHaveText("50,200");
+});

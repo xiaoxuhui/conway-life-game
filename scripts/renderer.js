@@ -10,6 +10,7 @@
   const MAX_CELL_SIZE = 1024;
   // 每隔多少个格子画一条更粗的主网格线（X 或 Y 能被它整除的位置）
   const GRID_MAJOR_STEP = 10;
+  const MAX_IMPORT_PREVIEW_CELLS = 100_000;
 
   function clamp(value, minimum, maximum) {
     return Math.min(maximum, Math.max(minimum, value));
@@ -207,8 +208,17 @@
       const size = camera.cellSize * ratio;
       const minimumPixel = Math.max(1, ratio);
       const drawSize = Math.max(minimumPixel, size);
+      const { pattern } = placement;
+      const preview = pattern.cellsIn?.({
+        minRow: Math.ceil(camera.centerRow - (canvas.height / 2 + drawSize) / size) - placement.row,
+        maxRow: Math.floor(camera.centerRow + canvas.height / 2 / size) - placement.row,
+        minColumn: Math.ceil(camera.centerColumn - (canvas.width / 2 + drawSize) / size) - placement.column,
+        maxColumn: Math.floor(camera.centerColumn + canvas.width / 2 / size) - placement.column,
+      }) ?? pattern.cells;
+      let previewed = 0;
 
-      for (const [relativeRow, relativeColumn] of placement.pattern.cells) {
+      for (const [relativeRow, relativeColumn] of preview) {
+        if (pattern.cellsIn && previewed++ >= MAX_IMPORT_PREVIEW_CELLS) break;
         const row = placement.row + relativeRow;
         const column = placement.column + relativeColumn;
         const x = (column - camera.centerColumn) * size + canvas.width / 2;

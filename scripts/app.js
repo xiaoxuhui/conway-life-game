@@ -150,6 +150,7 @@
   const cycleTracker = Life.createCycleTracker({ describeWorld: Tiles.describeWorld, sameWorld: Tiles.sameWorld });
   let tabHoldTimer = null;
   let runningFromTab = false;
+  let pendingPlacement = null;
   // 状态按职责分为 world（演化/视图）/ pointer（指针与手势）/ dialogs（对话框与瞬时 UI 模式）/ storage（持久化库）四个子对象，
   // 便于维护；所有访问点已同步改为 state.<group>.<field>，行为与原扁平结构完全一致。
   const state = {
@@ -798,9 +799,12 @@
     else startPlacement();
   }
 
-  function transformPlacement(transform) {
-    if (!state.dialogs.placement) return;
-    replacePlacementPattern(transform(state.dialogs.placement.pattern));
+  function transformPlacement(operation) {
+    const placement = state.dialogs.placement;
+    if (!placement || placement === pendingPlacement) return;
+    const { pattern } = placement;
+    const transform = operation === "rotate" ? Presets.rotatePattern : Presets.flipPattern;
+    replacePlacementPattern(pattern[operation]?.() ?? transform(pattern));
   }
 
   function closeDialog(dialog) {
@@ -867,7 +871,7 @@
       if (state.dialogs.logicGenerationController) throw new Error("请先完成或取消正在生成的逻辑结构");
       state.dialogs.placement = placementAtCameraCenter(pattern);
       stop();
-      showToast(`已读取 ${pattern.name}，请在观察区选择放置位置。`, { duration: 5000 });
+      showToast(`已读取 ${pattern.name}（${formatNumber(pattern.cellCount)} 个活细胞），请在观察区选择放置位置。`, { duration: 5000 });
     } catch (error) {
       showToast(`Golly 图案导入失败。${error.message}`, { duration: 5000 });
     } finally {
@@ -897,7 +901,7 @@
   }
 
   function updatePlacementFromEvent(event) {
-    if (!state.dialogs.placement) return;
+    if (!state.dialogs.placement || state.dialogs.placement === pendingPlacement) return;
     const coordinate = renderer.coordinateFromPointer(event, state.world.camera);
     const row = coordinate.row - Math.floor(state.dialogs.placement.pattern.height / 2);
     const column = coordinate.column - Math.floor(state.dialogs.placement.pattern.width / 2);
@@ -908,29 +912,37 @@
   }
 
   function beginPlacementDrag(event) {
-    if (!state.dialogs.placement) return;
+    if (!state.dialogs.placement || state.dialogs.placement === pendingPlacement) return;
     state.dialogs.placement.pointerId = event.pointerId;
     updatePlacementFromEvent(event);
   }
 
-  function commitPlacement() {
-    if (!state.dialogs.placement) return;
+  async function commitPlacement() {
+    const placement = state.dialogs.placement;
+    if (!placement || pendingPlacement) return;
+    const { pattern, row, column } = placement;
+    const originalWorld = state.world.cells;
+    const isCurrent = () => state.dialogs.placement === placement && state.world.cells === originalWorld;
     try {
+      let placed;
+      if (pattern.cellsIn) {
+        pendingPlacement = placement;
+        elements.canvas.setAttribute("aria-busy", "true");
+        showToast("正在放置图案，按 Esc 可取消。", { duration: 10000 });
+        placed = await window.GollyImport.placePattern(originalWorld, pattern, row, column, isCurrent);
+        if (!placed || !isCurrent()) return;
+      } else {
+        placed = Life.placePattern(originalWorld, pattern.cells, row, column, false);
+      }
       if (state.world.generation !== 0) state.world.logicOutputs = [];
-      state.world.cells = Life.placePattern(
-        state.world.cells,
-        state.dialogs.placement.pattern.cells,
-        state.dialogs.placement.row,
-        state.dialogs.placement.column,
-        false,
-      );
+      state.world.cells = placed;
       cycleTracker.reset();
       state.world.generation = 0;
-      const logic = state.world.rule === Life.DEFAULT_RULE ? state.dialogs.placement.pattern.logic : null;
+      const logic = state.world.rule === Life.DEFAULT_RULE ? pattern.logic : null;
       if (logic) {
         state.world.logicOutputs.push({
-          row: state.dialogs.placement.row,
-          column: state.dialogs.placement.column,
+          row,
+          column,
           gate: logic.gate,
           inputs: [...logic.inputs],
           expected: logic.expected,
@@ -944,12 +956,17 @@
       render();
       showToast(
         logic
-          ? `已放置：${state.dialogs.placement.pattern.name}；第 ${logic.observeGeneration} 代锁存输出`
-          : `已放置：${state.dialogs.placement.pattern.name}，可继续放置`,
+          ? `已放置：${pattern.name}；第 ${logic.observeGeneration} 代锁存输出`
+          : `已放置：${pattern.name}，可继续放置`,
         { duration: logic ? 4200 : 2400 },
       );
     } catch (error) {
-      showToast(error.message);
+      if (isCurrent()) showToast(error.message);
+    } finally {
+      if (pendingPlacement === placement) {
+        pendingPlacement = null;
+        elements.canvas.removeAttribute("aria-busy");
+      }
     }
   }
 
@@ -1121,7 +1138,7 @@
     if (state.pointer.drawingPointerId === event.pointerId) endDrawing(cancelled);
     if (wasPlacement && state.dialogs.placement) {
       state.dialogs.placement.pointerId = null;
-      if (!cancelled) commitPlacement();
+      if (!cancelled) void commitPlacement();
       else render();
     }
     if (elements.canvas.hasPointerCapture(event.pointerId)) elements.canvas.releasePointerCapture(event.pointerId);
@@ -1159,10 +1176,10 @@
       finishPlacement();
     } else if (state.dialogs.placement && event.key.toLowerCase() === "r") {
       event.preventDefault();
-      transformPlacement(Presets.rotatePattern);
+      transformPlacement("rotate");
     } else if (state.dialogs.placement && event.key.toLowerCase() === "f") {
       event.preventDefault();
-      transformPlacement(Presets.flipPattern);
+      transformPlacement("flip");
     } else if (plainKey && event.key.toLowerCase() === "t" && !document.activeElement?.closest("dialog")) {
       event.preventDefault();
       if (!event.repeat) toggleRun();
@@ -1277,8 +1294,8 @@
   elements.importLogicFunctionsForm.addEventListener("submit", Dialog.importLogicFunctionLibrary);
   elements.closeImportLogicFunctions.addEventListener("click", Dialog.closeLogicFunctionImport);
   elements.cancelImportLogicFunctions.addEventListener("click", Dialog.closeLogicFunctionImport);
-  elements.rotatePattern.addEventListener("click", () => transformPlacement(Presets.rotatePattern));
-  elements.flipPattern.addEventListener("click", () => transformPlacement(Presets.flipPattern));
+  elements.rotatePattern.addEventListener("click", () => transformPlacement("rotate"));
+  elements.flipPattern.addEventListener("click", () => transformPlacement("flip"));
   elements.savePattern.addEventListener("click", Dialog.openSavePatternDialog);
   elements.managePatterns.addEventListener("click", Dialog.openManagePatternsDialog);
   elements.savePatternForm.addEventListener("submit", Dialog.saveNewPattern);
