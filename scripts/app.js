@@ -1070,6 +1070,7 @@
   function handleKeyDown(event) {
     if (ignoresGlobalShortcut()) return;
     if (document.activeElement?.tagName === "BUTTON" && event.code === "Space") return;
+    const plainKey = !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing;
     if (state.dialogs.placement && event.key === "Escape") {
       event.preventDefault();
       finishPlacement();
@@ -1079,6 +1080,12 @@
     } else if (state.dialogs.placement && event.key.toLowerCase() === "f") {
       event.preventDefault();
       transformPlacement(Presets.flipPattern);
+    } else if (plainKey && event.key.toLowerCase() === "t" && !document.activeElement?.closest("dialog")) {
+      event.preventDefault();
+      if (!event.repeat) toggleRun();
+    } else if (plainKey && event.key === "Tab" && !event.shiftKey && event.target === elements.canvas) {
+      event.preventDefault();
+      if (!event.repeat && !state.world.running) advance();
     } else if (event.code === "Space") {
       event.preventDefault();
       if (event.repeat) return;
