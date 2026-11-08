@@ -551,13 +551,16 @@
       const gunCells = transformCoordinates(
         shiftCoordinates(parentKit.inputGunCells, ...origin), transform,
       );
-      gunGroups.push({ zoneCells: gunCells, referenceCells: gunCells });
+      gunGroups.push({
+        zoneCells: gunCells,
+        referenceCells: transformCoordinates(shiftCoordinates(source, ...origin), transform),
+      });
     });
     return {
       parent: { ...parent, cells: uniqueCoordinates(cells), gunGroups },
       inputOrigins: transformCoordinates(parentKit.inputOrigins, transform),
       terminalCells: transformCoordinates(parentKit.terminalCells, transform),
-      targetCells: transformCoordinates(
+      targetCells: portIndex === undefined ? [] : transformCoordinates(
         shiftCoordinates(parentKit.inputSignalCells, ...parentKit.inputOrigins[portIndex]),
         transform,
       ),
@@ -728,6 +731,257 @@
     return candidates?.direct[0] || candidates?.reflected[0] || null;
   }
 
+  // A single-path chain may include AND and OR with a constant on the other port.
+  // Every occurrence remains a separate copy of its kit.
+  function collectAxialChain(node) {
+    const chain = [];
+    while (node?.gate) {
+      const nestedPorts = node.children.flatMap((child, port) => child.gate ? [port] : []);
+      if (nestedPorts.length > 1) return null;
+      const [port] = nestedPorts;
+      chain.push({ node, port });
+      node = node.children[port];
+    }
+    return chain.length >= 3 ? chain.reverse() : null;
+  }
+
+  function gliderTrack(cells) {
+    const phases = [];
+    let frame = cells;
+    for (let index = 0; index < 4; index += 1) {
+      phases.push({ cells: frame, shape: canonicalShape(frame) });
+      frame = advanceCells(frame, 1);
+    }
+    const delta = alignCoordinates(cells, frame);
+    return {
+      delta,
+      at(delay) {
+        const phase = phases[((delay % 4) + 4) % 4];
+        const cycles = Math.floor(delay / 4);
+        return {
+          shape: phase.shape,
+          cells: shiftCoordinates(phase.cells, cycles * delta[0], cycles * delta[1]),
+        };
+      },
+    };
+  }
+
+  function finishAxialRoute(track, target, anchor = [0, 0]) {
+    for (let phase = 0; phase < 4; phase += 1) {
+      const frame = track.at(phase);
+      if (frame.shape !== target.shape) continue;
+      const [row, column] = alignCoordinates(target.cells, frame.cells);
+      const cycles = -(row + anchor[0]) * track.delta[0];
+      return {
+        delay: phase + 4 * cycles,
+        column: column + anchor[1] + cycles * track.delta[1],
+      };
+    }
+    return null;
+  }
+
+  const AXIAL_CHAIN_TRANSFORMS = Object.freeze(["T", "R270", "I", "FV"]);
+
+  function chainOrientations(kit, port, reverseOrder) {
+    const names = reverseOrder ? [...AXIAL_CHAIN_TRANSFORMS].reverse() : AXIAL_CHAIN_TRANSFORMS;
+    return names.flatMap((name) => {
+      const transform = COORDINATE_TRANSFORMS[name];
+      if (transform(kit.signalDelta)[1] !== 1) return [];
+      const input = port === undefined ? null : transformCoordinates(
+        shiftCoordinates(kit.inputSignalCells, ...kit.inputOrigins[port]), transform,
+      );
+      return [{
+        name, track: gliderTrack(transformCoordinates(kit.signalCells, transform)),
+        target: input && { cells: input, shape: canonicalShape(input) },
+      }];
+    });
+  }
+
+  function chainReflectorOrientations(kit) {
+    return AXIAL_CHAIN_TRANSFORMS.flatMap((name) => {
+      const transform = COORDINATE_TRANSFORMS[name];
+      const input = transformCoordinates(kit.inputSignalCells, transform);
+      if (gliderTrack(input).delta[1] !== 1 || transform(kit.signalDelta)[1] !== 1) return [];
+      return [{
+        name, input, shape: canonicalShape(input),
+        output: gliderTrack(transformCoordinates(kit.outputSignalCells, transform)),
+      }];
+    });
+  }
+
+  function reflectedChainLink(source, target, reflectors, outputDelay, spacing) {
+    let best = null;
+    function consider(track, anchor, wait, path) {
+      const tail = finishAxialRoute(track, target, anchor);
+      if (!tail || tail.delay < 60 || tail.column < spacing - 24 || tail.column > spacing + 80) return;
+      const score = path.length * 1000 + Math.abs(tail.column - spacing);
+      if (!best || score < best.score) {
+        best = { column: tail.column, delay: wait + tail.delay, reflectors: path, score };
+      }
+    }
+    // Moving a reflector by one cell along the incoming track preserves its
+    // glider phase and changes the flight by four generations.
+    for (let phase = 0; phase < 4; phase += 1) {
+      for (const first of reflectors) {
+        const match = source.at(phase);
+        if (match.shape !== first.shape) continue;
+        for (let flight = 60 + phase; flight <= 4 * (spacing + 48); flight += 16) {
+          const firstAnchor = alignCoordinates(first.input, source.at(flight).cells);
+          const firstStep = { name: first.name, anchor: firstAnchor, delay: flight };
+          const wait = flight + outputDelay;
+          consider(first.output, firstAnchor, wait, [firstStep]);
+          if (best?.reflectors.length === 1) continue;
+          for (const second of reflectors) {
+            for (let midPhase = 0; midPhase < 4; midPhase += 1) {
+              if (first.output.at(midPhase).shape !== second.shape) continue;
+              for (let middle = 60 + midPhase; middle <= 4 * (spacing + 64); middle += 8) {
+                const incident = shiftCoordinates(first.output.at(middle).cells, ...firstAnchor);
+                const anchor = alignCoordinates(second.input, incident);
+                const delay = wait + middle;
+                consider(second.output, anchor, delay + outputDelay, [
+                  firstStep, { name: second.name, anchor, delay },
+                ]);
+              }
+            }
+          }
+        }
+      }
+    }
+    return best;
+  }
+
+  function compileAxialChainCandidate(chain, resolveGateKit, reflectorKit, options) {
+    const kits = chain.map(({ node }) => resolveGateKit(node.gate));
+    if (kits.some((kit) => !kit)) throw new LogicCodeError("同排线路缺少基础门体");
+    const orientations = kits.map((kit, index) => chainOrientations(
+      kit, chain[index].port, options.reverseOrder,
+    ));
+    const reflectors = reflectorKit?.acceptedSignalPeriod === 30
+      ? chainReflectorOrientations(reflectorKit)
+      : [];
+    // Keep the best prefix for each orientation. The next link depends on
+    // that orientation and the port, not on the preceding expression.
+    let prefixes = orientations[0].map((orientation) => ({
+      orientation, score: 0, previous: null, link: null, hasReflection: false,
+    }));
+    const reflectedCache = new Map();
+    for (let index = 1; index < chain.length; index += 1) {
+      const next = [];
+      for (const orientation of orientations[index]) {
+        const best = [null, null];
+        for (const prefix of prefixes) {
+          const from = prefix.orientation;
+          const route = finishAxialRoute(from.track, orientation.target);
+          const links = [];
+          if (route?.column >= 52 && route.delay >= 48) {
+            links.push({ ...route, reflectors: [], score: route.column / 100 });
+          }
+          if (reflectors.length) {
+            const key = [kits[index - 1].gate, from.name, kits[index].gate,
+              orientation.name, chain[index].port].join(":");
+            if (!reflectedCache.has(key)) {
+              reflectedCache.set(key, reflectedChainLink(
+                from.track, orientation.target, reflectors, reflectorKit.outputDelay,
+                options.spacing,
+              ));
+            }
+            const reflected = reflectedCache.get(key);
+            if (reflected) links.push(reflected);
+          }
+          for (const link of links) {
+            const score = prefix.score + link.score;
+            const hasReflection = prefix.hasReflection || link.reflectors.length > 0;
+            const kind = Number(hasReflection);
+            if (!best[kind] || score < best[kind].score) {
+              best[kind] = { orientation, score, previous: prefix, link, hasReflection };
+            }
+          }
+        }
+        next.push(...best.filter(Boolean));
+      }
+      if (!next.length) return null;
+      prefixes = next;
+    }
+    if (reflectorKit) prefixes = prefixes.filter((prefix) => prefix.hasReflection);
+    if (!prefixes.length) return null;
+    let entry = prefixes.reduce((best, item) => item.score < best.score ? item : best);
+    const placements = [];
+    while (entry) {
+      placements.push(entry);
+      entry = entry.previous;
+    }
+    placements.reverse();
+
+    let column = 0;
+    let observeGeneration = 0;
+    const cells = [];
+    const connections = [];
+    const gunGroups = [];
+    const gateAnchors = [];
+    let root;
+    for (let index = 0; index < chain.length; index += 1) {
+      const { node, port } = chain[index];
+      const { link, orientation } = placements[index];
+      const kit = kits[index];
+      let phase = 0;
+      if (link) {
+        const alignGeneration = observeGeneration + link.delay;
+        const metadata = link.reflectors.map((reflector) => {
+          const anchor = [reflector.anchor[0], reflector.anchor[1] + column];
+          const arrivalGeneration = observeGeneration + reflector.delay;
+          const oscillatorPhase = (reflectorKit.oscillatorPeriod
+            - arrivalGeneration % reflectorKit.oscillatorPeriod) % reflectorKit.oscillatorPeriod;
+          const place = (coordinates) => shiftCoordinates(transformCoordinates(
+            coordinates, COORDINATE_TRANSFORMS[reflector.name],
+          ), ...anchor);
+          const body = place(advanceCells(reflectorKit.bodyCells, oscillatorPhase));
+          cells.push(...body);
+          gunGroups.push({
+            zoneCells: place(reflectorKit.bodyCells), referenceCells: body,
+            incident: { cells: place(reflectorKit.inputSignalCells), generation: arrivalGeneration },
+          });
+          return { transform: reflector.name, anchor, arrivalGeneration };
+        });
+        column += link.column;
+        // NOT's isolated pulse collision needs an offset to avoid residues
+        // when a finite burst from the upstream gate starts or stops.
+        const offset = node.gate === "NOT" ? options.notPhase : 0;
+        phase = ((kit.inputSignalGeneration - alignGeneration + offset) % 30 + 30) % 30;
+        observeGeneration = alignGeneration + kit.observeGeneration
+          - kit.inputSignalGeneration - offset + 60;
+        connections.push({
+          from: chain[index - 1].node.gate,
+          to: node.gate, portIndex: port,
+          expected: node.children[port].value,
+          alignGeneration,
+          cells: shiftCoordinates(orientation.target.cells, 0, column),
+          routeMode: ["direct", "single-reflector", "double-reflector"][metadata.length],
+          ...(metadata.length ? { reflectors: metadata } : {}),
+        });
+      } else observeGeneration = kit.observeGeneration;
+      const module = transformedParent(node, kit, port, orientation.name);
+      const placed = shiftCircuit({
+        ...module.parent,
+        cells: advanceCells(module.parent.cells, phase),
+        gunGroups: module.parent.gunGroups.map((group) => ({
+          ...group, referenceCells: advanceCells(group.referenceCells, phase),
+        })),
+        inputOrigins: module.inputOrigins,
+        terminalCells: module.terminalCells,
+      }, [0, column]);
+      cells.push(...placed.cells);
+      gunGroups.push(...placed.gunGroups);
+      gateAnchors.push([0, column]);
+      root = placed;
+    }
+    if (uniqueCoordinates(cells).length !== cells.length) return null;
+    return {
+      ...root, gate: chain.at(-1).node.gate, expected: chain.at(-1).node.value,
+      cells, gunGroups, gateAnchors, connections, observeGeneration,
+      verifySignals: true,
+    };
+  }
+
   function normalizeCircuit(circuit) {
     const metadataCells = [
       ...circuit.cells,
@@ -738,8 +992,12 @@
       ...circuit.connections.flatMap((connection) => connection.cells),
       ...circuit.gunGroups.flatMap((group) => group.zoneCells),
     ];
-    const minRow = Math.min(...metadataCells.map(([row]) => row));
-    const minColumn = Math.min(...metadataCells.map(([, column]) => column));
+    let minRow = Infinity;
+    let minColumn = Infinity;
+    for (const [row, column] of metadataCells) {
+      minRow = Math.min(minRow, row);
+      minColumn = Math.min(minColumn, column);
+    }
     const shift = (coordinates) => shiftCoordinates(coordinates, -minRow, -minColumn);
     const cells = shift(circuit.cells);
     const allShifted = [
@@ -753,8 +1011,8 @@
     ];
     return {
       cells,
-      width: Math.max(...allShifted.map(([, column]) => column)) + 1,
-      height: Math.max(...allShifted.map(([row]) => row)) + 1,
+      width: allShifted.reduce((width, [, column]) => Math.max(width, column + 1), 0),
+      height: allShifted.reduce((height, [row]) => Math.max(height, row + 1), 0),
       inputOrigins: shift(circuit.inputOrigins),
       signalCells: shift(circuit.signalCells),
       terminalCells: shift(circuit.terminalCells),
@@ -776,12 +1034,19 @@
         ...group,
         zoneCells: shift(group.zoneCells),
         referenceCells: shift(group.referenceCells),
+        ...(group.incident ? { incident: { ...group.incident, cells: shift(group.incident.cells) } } : {}),
       })),
+      ...(circuit.verifySignals ? {
+        outputProbe: {
+          cells: shift(circuit.signalCells), generation: circuit.observeGeneration, expected: circuit.expected,
+        },
+      } : {}),
     };
   }
 
   return Object.freeze({
-    collectNestedEdges, compileAxialPair, compileAxialPairCandidates, compileCircuit, normalizeCircuit,
+    collectAxialChain, collectNestedEdges, compileAxialChainCandidate, compileAxialPair,
+    compileAxialPairCandidates, compileCircuit, normalizeCircuit,
     orientSouthEast, phaseShiftCircuit, transformCircuit,
     transformNames: Object.freeze(Object.keys(COORDINATE_TRANSFORMS)),
   });

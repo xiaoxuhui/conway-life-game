@@ -476,7 +476,7 @@ test("AX07：XOR 的每条嵌套边都能生成双反射后备候选", () => {
 });
 
 test("AX08/AX09：大型结构仅在正常候选全失败后逐边反射并失败关闭", async () => {
-  const command = LogicCode.parse("NOT(NOT(AND(1,1)))");
+  const command = LogicCode.parse("OR(AND(1,1),NOT(1))");
   const progress = [];
   const unsafeGateKit = (gate) => {
     const kit = Presets.getLogicGateKit(gate);
@@ -507,7 +507,7 @@ test("AX08/AX09：大型结构仅在正常候选全失败后逐边反射并失�
     [...new Set(progress
       .filter(({ phase, routeStage }) => phase === "routing" && routeStage === "reflected")
       .map(({ reflectedEdgePath }) => reflectedEdgePath))],
-    ["root.0.0", "root.0"],
+    ["root.0", "root.1"],
   );
   assert.ok(progress
     .filter(({ phase, routeStage }) => phase === "rejected" && routeStage === "reflected")
@@ -516,8 +516,13 @@ test("AX08/AX09：大型结构仅在正常候选全失败后逐边反射并失�
 
 test("两条连续门到门线路都由实际滑翔机逐级传递", () => {
   const command = LogicCode.parse("NOT(NOT(AND(1,1)))");
-  const pattern = LogicCode.composePattern(command, Presets.getPreset, Presets.getLogicGateKit);
+  const pattern = LogicCode.composePattern(
+    command, Presets.getPreset, Presets.getLogicGateKit, Presets.getLogicReflectorKit,
+  );
   assert.equal(pattern.connectionCount, 2);
+  assert.equal(pattern.routing.routeStage, "reflected");
+  assert.equal(new Set(pattern.gateAnchors.map(([row]) => row)).size, 1);
+  assert.ok(pattern.gateAnchors.every(([, col], index, anchors) => index === 0 || col > anchors[index - 1][1]));
 
   let world = Life.createWorld(pattern.cells);
   for (let generation = 0; generation <= pattern.logic.observeGeneration; generation += 1) {
@@ -535,6 +540,39 @@ test("两条连续门到门线路都由实际滑翔机逐级传递", () => {
     Number(pattern.logic.signalCells.every(([row, column]) => Life.isAlive(world, row, column))),
     1,
   );
+});
+
+test("九层 NOT 保留九个同排门体；拆掉源枪会切断第一条真实连接", () => {
+  const command = LogicCode.parse("NOT(".repeat(9) + "0" + ")".repeat(9));
+  const pattern = LogicCode.composePattern(
+    command, Presets.getPreset, Presets.getLogicGateKit,
+    () => { throw new Error("直连成功时不得请求反射器"); },
+  );
+  assert.equal(pattern.gateAnchors.length, 9);
+  assert.equal(pattern.connections.length, 8);
+  assert.equal(pattern.routing.reflectorCount, 0);
+  const [row, col] = pattern.gateAnchors[0];
+  assert.ok(pattern.gateAnchors.every(([y, x], index, anchors) => (
+    y === row && (index === 0 || x > anchors[index - 1][1])
+  )));
+  const connection = pattern.connections[0];
+  assert.equal(connection.expected, 1);
+  const [sourceGun] = Presets.getLogicGateKit("NOT").bodyGunGroups;
+  const initial = Life.createWorld(pattern.cells);
+  const gun = [1, -1].map((sign) => sourceGun.map(([y, x]) => [row + sign * x, col + y]))
+    .find((candidate) => candidate.every(([y, x]) => Life.isAlive(initial, y, x)));
+  assert.ok(gun, "首门的独立滑翔机枪必须能在初始世界中找到");
+  const gunKeys = new Set(gun.map((cell) => cell.join(",")));
+  const probeValue = (cells) => {
+    let world = Life.createWorld(cells);
+    for (let gen = 0; gen < connection.alignGeneration; gen += 1) {
+      world = Life.nextGeneration(world);
+    }
+    return Number(connection.cells.every(([r, c]) => Life.isAlive(world, r, c)));
+  };
+  assert.equal(probeValue(pattern.cells), 1);
+  assert.equal(probeValue(pattern.cells.filter((cell) => !gunKeys.has(cell.join(",")))), 0);
+  assert.ok(pattern.gunSafety.verifiedThrough >= pattern.logic.observeGeneration + 120);
 });
 
 test("NOT(OR(A,B)) 的辅助滑翔机不会摧毁根 NOT 滑翔机枪", () => {

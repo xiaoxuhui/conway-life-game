@@ -12,7 +12,8 @@
 
   const { LogicCodeError } = LogicParse;
   const {
-    collectNestedEdges, compileAxialPairCandidates, compileCircuit, normalizeCircuit,
+    collectAxialChain, collectNestedEdges, compileAxialChainCandidate,
+    compileAxialPairCandidates, compileCircuit, normalizeCircuit,
     orientSouthEast,
   } = LogicCompile;
   const { abortIfRequested, defaultYieldControl, validateGunSafety, validateGunSafetyAsync } = LogicSafety;
@@ -78,6 +79,33 @@
 
   const REFLECTOR_ROUTE_VARIANTS = 1;
 
+  function* chainAttempts(resolveReflectorKit) {
+    const phases = [-6, 5, -5, 6];
+    for (const notPhase of phases) {
+      for (const reverseOrder of [false, true]) {
+        yield { routeStage: "direct", notPhase, reverseOrder, reflectorKit: null };
+      }
+    }
+    const reflectorKit = resolveReflectorKit?.("P5_90");
+    if (reflectorKit?.acceptedSignalPeriod !== 30) return;
+    for (const spacing of [160, 200, 260]) {
+      for (const [index, notPhase] of phases.entries()) {
+        yield { routeStage: "reflected", spacing, notPhase, reverseOrder: index % 2 === 1, reflectorKit };
+      }
+    }
+  }
+
+  function chainRouting(circuit, attempt) {
+    const reflectorCount = circuit.connections.reduce(
+      (count, connection) => count + (connection.reflectors?.length || 0), 0,
+    );
+    return { mode: "axial-chain", routeStage: attempt.routeStage, reflectorCount };
+  }
+
+  function noSafeChain() {
+    return new LogicCodeError("同排直连和可用的反射候选未通过完整演化验证，无法安全生成这条门链");
+  }
+
   function largeReflectedRouting(
     layoutVariant, routePadding, branchPulseSpacing, edge, normalCandidatesTested,
     reflectedCandidatesTested,
@@ -96,6 +124,19 @@
     if (!command.steps || command.steps.length <= 1) return resolvePreset(command.presetId);
     if (!command.tree || typeof resolveGateKit !== "function") {
       throw new LogicCodeError("当前环境缺少真实级联门体");
+    }
+    const chain = collectAxialChain(command.tree);
+    if (chain) {
+      for (const attempt of chainAttempts(resolveReflectorKit)) {
+        const circuit = compileAxialChainCandidate(chain, resolveGateKit, attempt.reflectorKit, attempt);
+        if (!circuit) continue;
+        const normalized = normalizeCircuit(circuit);
+        const safety = validateGunSafety(normalized);
+        if (safety.safe) return assembledPattern(
+          command, circuit, normalized, safety, chainRouting(circuit, attempt),
+        );
+      }
+      throw noSafeChain();
     }
     if (typeof resolveReflectorKit === "function") {
       const routeSet = compileAxialPairCandidates(
@@ -207,6 +248,34 @@
     if (!command.steps || command.steps.length <= 1) return resolvePreset(command.presetId);
     if (!command.tree || typeof resolveGateKit !== "function") {
       throw new LogicCodeError("当前环境缺少真实级联门体");
+    }
+    const chain = collectAxialChain(command.tree);
+    if (chain) {
+      const yieldControl = options.yieldControl || defaultYieldControl;
+      let attemptIndex = 0;
+      for (const attempt of chainAttempts(resolveReflectorKit)) {
+        const progress = {
+          layoutMode: "axial-chain", routeStage: attempt.routeStage,
+          attemptIndex, gateCount: chain.length,
+        };
+        attemptIndex += 1;
+        options.onProgress?.({ ...progress, phase: "routing" });
+        await yieldControl();
+        abortIfRequested(options.signal);
+        const circuit = compileAxialChainCandidate(chain, resolveGateKit, attempt.reflectorKit, attempt);
+        if (!circuit) continue;
+        const normalized = normalizeCircuit(circuit);
+        const routing = chainRouting(circuit, attempt);
+        const safety = await validateGunSafetyAsync(normalized, {
+          ...options,
+          onProgress: (step) => options.onProgress?.({
+            ...progress, ...step, phase: "safety", reflectorCount: routing.reflectorCount,
+          }),
+        });
+        if (safety.safe) return assembledPattern(command, circuit, normalized, safety, routing);
+        options.onProgress?.({ ...progress, ...safety, phase: "rejected" });
+      }
+      throw noSafeChain();
     }
     if (resolveReflectorKit) {
       const routeSet = compileAxialPairCandidates(
