@@ -2,6 +2,7 @@
   "use strict";
 
   const Life = window.LifeEngine;
+  const Tiles = window.LifeTiles;
   const RendererModule = window.LifeRenderer;
   const Presets = window.LifePresets;
   const PatternStore = window.PatternLibrary;
@@ -146,7 +147,7 @@
   };
 
   const renderer = RendererModule.create(elements.canvas);
-  const cycleTracker = Life.createCycleTracker();
+  const cycleTracker = Life.createCycleTracker({ describeWorld: Tiles.describeWorld, sameWorld: Tiles.sameWorld });
   let tabHoldTimer = null;
   let runningFromTab = false;
   // 状态按职责分为 world（演化/视图）/ pointer（指针与手势）/ dialogs（对话框与瞬时 UI 模式）/ storage（持久化库）四个子对象，
@@ -358,7 +359,10 @@
   function evolveOneGeneration() {
     if (state.dialogs.placement) state.dialogs.placement = null;
     cycleTracker.observe(state.world.cells, state.world.generation);
-    state.world.cells = Life.nextGeneration(state.world.cells, state.world.rule);
+    const tiled = state.world.running && state.world.rule === Life.DEFAULT_RULE && !state.world.pruneGliders
+      ? Tiles.nextGeneration(state.world.cells)
+      : null;
+    state.world.cells = tiled ?? Life.nextGeneration(state.world.cells, state.world.rule);
     if (state.world.pruneGliders && state.world.rule === Life.DEFAULT_RULE) {
       state.world.cells = Life.pruneOutlyingGliders(state.world.cells);
     }
@@ -457,6 +461,7 @@
     }
     const changed = state.world.running;
     state.world.running = false;
+    state.world.cells = Tiles.editableWorld(state.world.cells);
     state.world.frameAccumulator = 0;
     state.world.lastFrameTimestamp = null;
     state.world.speedWindowStarted = null;
@@ -469,7 +474,11 @@
   function start() {
     if (state.world.running) return;
     clearTabHold();
+    endDrawing();
     state.dialogs.placement = null;
+    if (state.world.rule === Life.DEFAULT_RULE && !state.world.pruneGliders) {
+      state.world.cells = Tiles.prepare(state.world.cells);
+    }
     state.world.running = true;
     state.world.jumpProgress = 0;
     state.world.frameAccumulator = 0;
@@ -1221,7 +1230,9 @@
     state.world.pruneGliders = elements.pruneGliders.checked;
     cycleTracker.reset();
     if (state.world.pruneGliders && state.world.rule === Life.DEFAULT_RULE) {
-      state.world.cells = Life.pruneOutlyingGliders(state.world.cells);
+      state.world.cells = Life.pruneOutlyingGliders(Tiles.editableWorld(state.world.cells));
+    } else if (state.world.running && state.world.rule === Life.DEFAULT_RULE) {
+      state.world.cells = Tiles.prepare(state.world.cells);
     }
     render();
   });
