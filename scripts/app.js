@@ -127,6 +127,7 @@
     speed: document.querySelector("#speedInput"),
     status: document.querySelector("#statusText"),
     step: document.querySelector("#stepButton"),
+    jumpSize: document.querySelector("#jumpSizeInput"),
     toast: document.querySelector("#toast"),
     toastMessage: document.querySelector("#toastMessage"),
     undo: document.querySelector("#undoButton"),
@@ -158,6 +159,8 @@
       running: false,
       pruneGliders: false,
       speed: SpeedControl.DEFAULT_SPEED,
+      jumpSize: 1,
+      jumpProgress: 0,
       animationFrame: null,
       frameAccumulator: 0,
       lastFrameTimestamp: null,
@@ -251,10 +254,10 @@
     return output[key].map(([row, column]) => [output.row + row, output.column + column]);
   }
 
-  function logicAnnotations() {
+  function logicAnnotations(generation) {
     return state.world.logicOutputs.map((output) => ({
       observeGeneration: output.observeGeneration,
-      result: output.result,
+      result: generation < output.observeGeneration ? null : output.result,
       terminalCells: absoluteLogicCells(output, "terminalCells"),
     }));
   }
@@ -267,14 +270,24 @@
     }
   }
 
-  function logicOutputSummary() {
+  function logicOutputSummary(generation) {
     if (state.world.logicOutputs.length === 0) return "";
     return state.world.logicOutputs
-      .map((output) => output.result === null ? `O=?（第 ${output.observeGeneration} 代读取）` : `O=${output.result}`)
+      .map((output) => generation < output.observeGeneration || output.result === null
+        ? `O=?（第 ${output.observeGeneration} 代读取）`
+        : `O=${output.result}`)
       .join("；");
   }
 
-  function render() {
+  function renderEvolutionReadouts() {
+    const period = cycleTracker.period;
+    elements.cycleReadout.hidden = period === null;
+    const periodText = period === null ? "" : `${formatNumber(period)} 代`;
+    if (elements.cyclePeriod.textContent !== periodText) elements.cyclePeriod.textContent = periodText;
+    elements.actualSpeed.textContent = `${formatNumber(state.world.actualSpeed)}/s`;
+  }
+
+  function render(cells = state.world.cells, generation = state.world.generation) {
     const rule = Life.parseRule(state.world.rule);
     elements.pruneGliders.disabled = rule.canonical !== Life.DEFAULT_RULE;
     elements.pruneGliders.checked = state.world.pruneGliders;
@@ -285,15 +298,12 @@
       ? "当前为康威规则，逻辑电路可正常验证。"
       : "当前为自定义规则：内置图案的行为可能改变；逻辑电路仅适用于 B3/S23，已停用生成与输出锁存。";
     elements.logicCodeButton.disabled = state.world.rule !== Life.DEFAULT_RULE && !state.dialogs.logicGenerationController;
-    const alive = Life.countAlive(state.world.cells);
-    renderer.draw(state.world.cells, state.world.camera, state.world.running, state.dialogs.placement, logicAnnotations());
-    elements.generation.textContent = formatNumber(state.world.generation);
-    const period = cycleTracker.period;
-    elements.cycleReadout.hidden = period === null;
-    const periodText = period === null ? "" : `${formatNumber(period)} 代`;
-    if (elements.cyclePeriod.textContent !== periodText) elements.cyclePeriod.textContent = periodText;
+    const alive = Life.countAlive(cells);
+    const logicSummary = logicOutputSummary(generation);
+    renderer.draw(cells, state.world.camera, state.world.running, state.dialogs.placement, logicAnnotations(generation));
+    elements.generation.textContent = formatNumber(generation);
     elements.alive.textContent = formatNumber(alive);
-    elements.actualSpeed.textContent = `${formatNumber(state.world.actualSpeed)}/s`;
+    renderEvolutionReadouts();
     elements.zoomValue.textContent = formatZoom(state.world.camera.cellSize);
     elements.status.textContent = state.dialogs.placement ? "放置中" : state.world.running ? "演化中" : "已暂停";
     elements.run.querySelector(".button-icon").textContent = state.world.running ? "Ⅱ" : "▶";
@@ -315,12 +325,12 @@
     elements.flipPattern.disabled = !state.dialogs.placement;
     elements.canvas.setAttribute(
       "aria-label",
-      `无限大的康威生命游戏世界；规则 ${state.world.rule}；视图中心列 ${formatCoordinate(state.world.camera.centerColumn)}、行 ${formatCoordinate(state.world.camera.centerRow)}；第 ${state.world.generation} 代，${alive} 个活细胞，${state.dialogs.placement ? `正在放置${state.dialogs.placement.pattern.name}` : state.world.running ? "正在运行" : "已暂停"}${state.world.logicOutputs.length ? `；逻辑输出：${logicOutputSummary()}` : ""}。`,
+      `无限大的康威生命游戏世界；规则 ${state.world.rule}；视图中心列 ${formatCoordinate(state.world.camera.centerColumn)}、行 ${formatCoordinate(state.world.camera.centerRow)}；第 ${generation} 代，${alive} 个活细胞，${state.dialogs.placement ? `正在放置${state.dialogs.placement.pattern.name}` : state.world.running ? "正在运行" : "已暂停"}${logicSummary ? `；逻辑输出：${logicSummary}` : ""}。`,
     );
     elements.boardHint.textContent = state.dialogs.placement
       ? "拖动预览，松开或单击放置；R 旋转 · F 翻转 · Esc 完成。"
-      : state.world.logicOutputs.length
-        ? `方框中的 2×2 方块是静物输出端；${logicOutputSummary()}。`
+      : logicSummary
+        ? `方框中的 2×2 方块是静物输出端；${logicSummary}。`
       : state.world.running
         ? "正在演化；仍可拖动和缩放，暂停后可继续绘制。"
         : "左键绘制；中键、右键或按住空格拖动；滚轮缩放。";
@@ -364,7 +374,9 @@
 
   function runAnimationFrame(timestamp) {
     if (!state.world.running) return;
-    let shouldRender = false;
+    let cellsToRender;
+    let generationToRender;
+    const previousPeriod = cycleTracker.period;
     if (state.world.lastFrameTimestamp === null) {
       state.world.lastFrameTimestamp = timestamp;
       state.world.speedWindowStarted = timestamp;
@@ -380,19 +392,25 @@
         evolveOneGeneration();
         state.world.frameAccumulator -= 1;
         state.world.speedWindowGenerations += 1;
-        shouldRender = true;
+        state.world.jumpProgress += 1;
+        if (state.world.jumpProgress === state.world.jumpSize) {
+          state.world.jumpProgress = 0;
+          cellsToRender = state.world.cells;
+          generationToRender = state.world.generation;
+        }
         if (performance.now() - computeStarted >= SpeedControl.FRAME_COMPUTE_BUDGET_MS) break;
       }
     }
 
     const windowElapsed = timestamp - state.world.speedWindowStarted;
-    if (windowElapsed >= SpeedControl.ACTUAL_SPEED_WINDOW_MS) {
+    const updateSpeed = windowElapsed >= SpeedControl.ACTUAL_SPEED_WINDOW_MS;
+    if (updateSpeed) {
       state.world.actualSpeed = Math.round(state.world.speedWindowGenerations * 1000 / windowElapsed);
       state.world.speedWindowStarted = timestamp;
       state.world.speedWindowGenerations = 0;
-      shouldRender = true;
     }
-    if (shouldRender) render();
+    if (cellsToRender) render(cellsToRender, generationToRender);
+    else if (updateSpeed || cycleTracker.period !== previousPeriod) renderEvolutionReadouts();
     state.world.animationFrame = window.requestAnimationFrame(runAnimationFrame);
   }
 
@@ -433,6 +451,7 @@
     clearTabHold();
     state.dialogs.placement = null;
     state.world.running = true;
+    state.world.jumpProgress = 0;
     state.world.frameAccumulator = 0;
     state.world.lastFrameTimestamp = null;
     state.world.speedWindowStarted = null;
@@ -1303,6 +1322,21 @@
   elements.speed.addEventListener("input", () => applySpeedInput(false));
   elements.speed.addEventListener("change", () => applySpeedInput(true));
   elements.speed.addEventListener("blur", () => applySpeedInput(true));
+  function applyJumpSize() {
+    const input = elements.jumpSize;
+    const value = input.valueAsNumber;
+    const nextSize = Number.isFinite(value)
+      ? Math.min(Number(input.max), Math.max(Number(input.min), Math.round(value)))
+      : state.world.jumpSize;
+    input.value = String(nextSize);
+    if (nextSize === state.world.jumpSize) return;
+    state.world.jumpSize = nextSize;
+    state.world.jumpProgress = 0;
+    if (state.world.running) render();
+  }
+
+  elements.jumpSize.addEventListener("change", applyJumpSize);
+  elements.jumpSize.addEventListener("blur", applyJumpSize);
   elements.canvas.addEventListener("blur", () => endTabHold());
   elements.canvas.addEventListener("pointerdown", handlePointerDown);
   elements.canvas.addEventListener("pointermove", handlePointerMove);
