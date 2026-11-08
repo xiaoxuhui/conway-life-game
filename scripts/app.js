@@ -372,6 +372,26 @@
     render();
   }
 
+  function advanceFrameGenerations() {
+    if (cycleTracker.period !== null) {
+      const { cells, generation, frameAccumulator, jumpSize, jumpProgress, logicOutputs } = state.world;
+      let limit = Math.floor(frameAccumulator);
+      if (jumpSize > 1) limit = Math.min(limit, jumpSize - jumpProgress);
+      for (const output of logicOutputs) {
+        if (output.result === null) limit = Math.min(limit, Math.max(1, output.observeGeneration - generation));
+      }
+      const forwarded = cycleTracker.fastForward(cells, generation, limit);
+      if (forwarded) {
+        state.world.cells = forwarded.world;
+        state.world.generation += forwarded.generations;
+        updateLogicOutputs();
+        return forwarded.generations;
+      }
+    }
+    evolveOneGeneration();
+    return 1;
+  }
+
   function runAnimationFrame(timestamp) {
     if (!state.world.running) return;
     let cellsToRender;
@@ -389,11 +409,11 @@
       state.world.lastFrameTimestamp = timestamp;
       const computeStarted = performance.now();
       while (state.world.frameAccumulator >= 1) {
-        evolveOneGeneration();
-        state.world.frameAccumulator -= 1;
-        state.world.speedWindowGenerations += 1;
-        state.world.jumpProgress += 1;
-        if (state.world.jumpProgress === state.world.jumpSize) {
+        const generations = advanceFrameGenerations();
+        state.world.frameAccumulator -= generations;
+        state.world.speedWindowGenerations += generations;
+        state.world.jumpProgress += generations;
+        if (state.world.jumpProgress >= state.world.jumpSize) {
           state.world.jumpProgress = 0;
           cellsToRender = state.world.cells;
           generationToRender = state.world.generation;

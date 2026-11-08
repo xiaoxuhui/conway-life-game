@@ -65,6 +65,70 @@ test("跳步只按完整间隔显示，循环节及时出现且暂停后可单�
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
 });
 
+test("确认循环后跳过计算，并在中间代读取逻辑输出", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.evolutionCalls = 0;
+    Object.defineProperty(window, "LifeEngine", {
+      configurable: true,
+      set(engine) {
+        Object.defineProperty(window, "LifeEngine", {
+          value: {
+            ...engine,
+            nextGeneration(...args) {
+              window.evolutionCalls += 1;
+              return engine.nextGeneration(...args);
+            },
+          },
+        });
+      },
+    });
+    Object.defineProperty(window, "LifePresets", {
+      configurable: true,
+      set(presets) {
+        Object.defineProperty(window, "LifePresets", {
+          value: {
+            ...presets,
+            getPreset(id) {
+              const preset = presets.getPreset(id);
+              if (id !== "blinker") return preset;
+              return {
+                ...preset,
+                logic: {
+                  gate: "PROBE", inputs: [], expected: 1, observeGeneration: 13,
+                  signalCells: [[1, 1]], terminalCells: [[1, 1]],
+                },
+              };
+            },
+          },
+        });
+      },
+    });
+  });
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"));
+  await page.goto("/");
+  const canvas = page.locator("#lifeCanvas");
+  await page.locator("#presetSelect").selectOption("builtin:blinker");
+  await page.locator("#loadPresetButton").click();
+  await canvas.click({ position: { x: 120, y: 120 } });
+  await expect(canvas).toHaveAttribute("aria-label", /第 13 代读取/);
+  await page.locator("#speedInput").fill("1000");
+  await page.locator("#jumpSizeInput").fill("4");
+  const run = page.locator("#runToggle");
+  await run.click();
+  await page.clock.runFor(100);
+
+  const displayed = Number(await page.locator("#generationValue").textContent());
+  expect(displayed).toBeGreaterThan(20);
+  expect(displayed % 4).toBe(0);
+  await expect(canvas).toHaveAttribute("aria-label", /逻辑输出：O=1/);
+  expect(await page.evaluate(() => window.evolutionCalls)).toBe(2);
+
+  await run.click();
+  await page.locator("#stepButton").click();
+  expect(await page.evaluate(() => window.evolutionCalls)).toBe(3);
+});
+
 test("棋盘实际重现才显示循环节，编辑和换规则后重新检测", async ({ page }) => {
   await page.goto("/");
   const blink = archive({ alive: [[0, -1], [0, 0], [0, 1]] });

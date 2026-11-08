@@ -359,6 +359,8 @@
     let checkpointWindow = 1;
     let lastGeneration = null;
     let period = null;
+    let cycleStart = 0;
+    let cycleFrames = null;
 
     function clearHistory() {
       recent.clear();
@@ -372,37 +374,43 @@
       checkpointWindow = 1;
       lastGeneration = null;
       period = null;
+      cycleFrames = null;
     }
 
     function confirm(generation, previousGeneration) {
       period = generation - previousGeneration;
+      const first = snapshots.findIndex((snapshot) => snapshot.generation === previousGeneration);
+      if (first !== -1 && snapshots[first + period - 1]?.generation === generation - 1) {
+        cycleStart = previousGeneration;
+        cycleFrames = snapshots.slice(first, first + period).map((snapshot) => snapshot.world);
+      }
       clearHistory();
       return period;
     }
 
-    // Evolution returns a fresh cell set. Call reset before editing a
-    // recorded world in place or starting a new evolution timeline.
-    function observe({ cells }, generation) {
+    // Recorded and restored phases are read-only until reset.
+    function observe(world, generation) {
       if (lastGeneration === generation) return period;
       if (lastGeneration !== null && generation !== lastGeneration + 1) reset();
       lastGeneration = generation;
       if (period !== null) return period;
 
+      const { cells } = world;
       const key = maxSnapshots > 0 && cells.size <= maxTrackedCells ? cellSignature(cells) : null;
       if (key !== null) {
         const matches = recent.get(key) || [];
         for (let index = matches.length - 1; index >= 0; index -= 1) {
           const previous = matches[index];
-          if (sameCells(cells, previous.cells)) return confirm(generation, previous.generation);
+          if (sameCells(cells, previous.world.cells)) return confirm(generation, previous.generation);
         }
-        const snapshot = { cells, generation, key };
+        const snapshot = { world, generation, key };
         matches.push(snapshot);
         recent.set(key, matches);
         snapshots.push(snapshot);
         trackedCells += cells.size;
         while (snapshots.length > maxSnapshots || trackedCells > maxTrackedCells) {
           const oldest = snapshots.shift();
-          trackedCells -= oldest.cells.size;
+          trackedCells -= oldest.world.cells.size;
           const bucket = recent.get(oldest.key);
           bucket.shift();
           if (bucket.length === 0) recent.delete(oldest.key);
@@ -422,7 +430,21 @@
       return period;
     }
 
-    return Object.freeze({ observe, reset, get period() { return period; } });
+    function fastForward(world, generation, maxGenerations) {
+      if (period === null || lastGeneration !== generation
+        || !Number.isSafeInteger(maxGenerations) || maxGenerations < 1) return null;
+      const generations = cycleFrames ? maxGenerations : maxGenerations - maxGenerations % period;
+      const target = generation + generations;
+      if (!generations || !Number.isSafeInteger(target)) return null;
+
+      lastGeneration = target;
+      return {
+        world: cycleFrames ? cycleFrames[(target - cycleStart) % period] : world,
+        generations,
+      };
+    }
+
+    return Object.freeze({ observe, fastForward, reset, get period() { return period; } });
   }
 
   function randomWorld(rows = 40, columns = 60, density = 0.25, random = Math.random, centerRow = 0, centerColumn = 0) {
