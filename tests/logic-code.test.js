@@ -755,6 +755,28 @@ test("编译器可以扩大平行通道间隔并统一最终输出方向", async
   assert.ok(pattern.gunSafety.verifiedThrough > pattern.logic.observeGeneration);
 });
 
+test("快速生成保留真实门体与连接，但跳过逐代验证", async () => {
+  const cases = [
+    ["NOT(".repeat(32) + "0" + ")".repeat(32), 32],
+    ["NOT(AND(1,1))", 2],
+    ["NOT(NOT(AND(1,1)))", 3],
+    ["OR(OR(AND(A,B),AND(OR(AND(A,NOT(B)),AND(NOT(A),B)),OR(AND(C,NOT(D)),AND(NOT(C),D)))),AND(C,D)),A=1,B=0,C=1,D=0", 15],
+  ];
+  for (const [source, gateCount] of cases) {
+    const pattern = await LogicCode.composePatternAsync(
+      LogicCode.parse(source), Presets.getPreset, Presets.getLogicGateKit, Presets.getLogicReflectorKit,
+      {
+        verifySafety: false,
+        clock: () => assert.fail("快速生成不应启动逐代验证"),
+      },
+    );
+    assert.equal(pattern.gateAnchors.length, gateCount, source);
+    assert.equal(pattern.connectionCount, gateCount - 1, source);
+    assert.equal(pattern.gunSafety, undefined, source);
+    if (gateCount === 3) assert.ok(pattern.routing.reflectorCount > 0);
+  }
+});
+
 test("十五门保存函数组合会搜索替代布局而不是误报没有安全线路", async () => {
   const xor = {
     callName: "XOR", code: "OR(AND(A,NOT(B)),AND(NOT(A),B))",

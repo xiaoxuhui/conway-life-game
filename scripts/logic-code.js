@@ -22,13 +22,13 @@
     return Object.freeze({
       id: `logic-code-${command.presetId}`,
       name: `逻辑代码 · ${command.expression}`,
-      description: `${normalized.connections.length} 条滑翔机线路真实级联；最终输出 O=${command.expected}`,
+      description: `${normalized.connections.length} 条滑翔机线路真实级联；预期输出 O=${command.expected}`,
       width: normalized.width,
       height: normalized.height,
       cells: Object.freeze(normalized.cells.map((coordinate) => Object.freeze(coordinate))),
       connectionCount: normalized.connections.length,
       gateAnchors: Object.freeze(normalized.gateAnchors.map(Object.freeze)),
-      gunSafety: Object.freeze({ verifiedThrough: safety.horizon }),
+      ...(safety ? { gunSafety: Object.freeze({ verifiedThrough: safety.horizon }) } : {}),
       routing: Object.freeze({ ...routing }),
       connections: Object.freeze(normalized.connections),
       logic: Object.freeze({
@@ -244,6 +244,7 @@
     const options = resolveReflectorKit
       ? maybeOptions
       : (resolveReflectorKitOrOptions || {});
+    const verifySafety = options.verifySafety !== false;
     abortIfRequested(options.signal);
     if (!command.steps || command.steps.length <= 1) return resolvePreset(command.presetId);
     if (!command.tree || typeof resolveGateKit !== "function") {
@@ -266,6 +267,7 @@
         if (!circuit) continue;
         const normalized = normalizeCircuit(circuit);
         const routing = chainRouting(circuit, attempt);
+        if (!verifySafety) return assembledPattern(command, circuit, normalized, null, routing);
         const safety = await validateGunSafetyAsync(normalized, {
           ...options,
           onProgress: (step) => options.onProgress?.({
@@ -275,13 +277,22 @@
         if (safety.safe) return assembledPattern(command, circuit, normalized, safety, routing);
         options.onProgress?.({ ...progress, ...safety, phase: "rejected" });
       }
-      throw noSafeChain();
+      if (verifySafety) throw noSafeChain();
+      throw new LogicCodeError("无法为这条门链布置同排线路");
     }
     if (resolveReflectorKit) {
       const routeSet = compileAxialPairCandidates(
         command.tree, resolveGateKit, resolveReflectorKit,
       );
       if (routeSet) {
+        if (!verifySafety) {
+          const direct = routeSet.direct[0];
+          const axial = direct || routeSet.reflected[0];
+          if (axial) return assembledPattern(
+            command, axial, normalizeCircuit(axial), null,
+            axialRouting(routeSet, direct ? "direct" : "reflected", 0, direct ? 0 : 2),
+          );
+        }
         options.onProgress?.({
           phase: "routing", layoutMode: "axial", routeStage: "direct",
           geometryAttempts: routeSet.directGeometryAttempts,
@@ -342,8 +353,10 @@
     let normalized;
     let safety;
     let routing;
-    const routePaddings = routePaddingCandidates(command);
-    const layoutVariants = layoutVariantCandidates(command);
+    // Give large unverified layouts more room for their branch traffic.
+    const wideFastLayout = !verifySafety && command.steps.length > 5;
+    const routePaddings = wideFastLayout ? [720] : routePaddingCandidates(command);
+    const layoutVariants = wideFastLayout ? [0] : layoutVariantCandidates(command);
     const branchSpacings = Array.isArray(options.branchSpacings)
       ? options.branchSpacings.filter((value) => Number.isInteger(value) && value >= 20 && value <= 160)
       : branchSpacingCandidates(command);
@@ -363,6 +376,7 @@
           ), branchPulseSpacing);
           normalized = normalizeCircuit(circuit);
           routing = { layoutVariant, routePadding, branchPulseSpacing };
+          if (!verifySafety) return assembledPattern(command, circuit, normalized, null, routing);
           await (options.yieldControl || defaultYieldControl)();
           abortIfRequested(options.signal);
           safety = await validateGunSafetyAsync(normalized, {
