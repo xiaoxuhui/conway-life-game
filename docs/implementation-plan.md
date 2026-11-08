@@ -364,3 +364,9 @@
 - **Definition of Done**: Node 测试覆盖快速生成的门链、同轴双门和分支；桌面和移动 Chromium 验证快速放置、完整验证和取消。
 - **Files**: scripts/logic-code.js, scripts/app.js, index.html, styles/main.css, tests/logic-code.test.js, e2e/app.smoke.spec.js, e2e/rules.spec.js.
 - **Evidence**: `node --test tests/logic-code.test.js tests/static-app.test.js` 通过 52 项。桌面与移动 Chromium 的 `e2e/app.smoke.spec.js` 和 `e2e/rules.spec.js` 通过 24 项，覆盖默认快速放置、手动完整验证和取消。语法检查、ESLint 和 `git diff --check` 通过。本机生成 32 门链和 15 门分支分别耗时约 71 ms 和 247 ms，计时包含布线与图案构建。
+
+## 棋盘循环节 `[PENDING]`
+
+- 棋盘的绝对坐标与某一代完全重合时显示循环节。单步和批量演化逐代检查。编辑、换规则、导入和重新放置时重新计数。
+- 用有内存上限的近期快照尽快识别短周期，用指数递增的检查点继续检测长周期。比较通过签名筛选和集合逐项匹配确认。
+- 验收覆盖静物、闪烁器、移动滑翔机、长周期检查点回退，以及浏览器中显示、继续演化和重置。
