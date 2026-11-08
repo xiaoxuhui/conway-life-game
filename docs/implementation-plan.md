@@ -352,3 +352,14 @@
 - [x] 为任意嵌套边建立稳定路径并生成双 p5 反射候选
 - [x] 将大型结构的反射阶段接入同步/异步组合器与进度元数据
 - [x] 覆盖 XOR 边枚举、正常成功零反射、强制进入反射阶段和完整安全失败关闭
+# 快速生成逻辑结构
+
+- **Status**: PENDING
+- **Approved**: 2026-11-08 用户要求跳过耗时的安全线路验证。
+- **Type**: feature
+
+## IG1 快速生成与可选验证 `[PENDING]`
+
+- **Objective**: 网页默认生成几何候选，用户可勾选逐代验证。
+- **Definition of Done**: Node 测试覆盖快速生成的门链、同轴双门和分支；桌面和移动 Chromium 验证快速放置、完整验证和取消。
+- **Files**: scripts/logic-code.js, scripts/app.js, index.html, styles/main.css, tests/logic-code.test.js, e2e/app.smoke.spec.js, e2e/rules.spec.js.
