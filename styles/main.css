@@ -130,6 +130,10 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
+.readout[hidden] {
+  display: none;
+}
+
 .readout-label {
   color: var(--text-muted);
   font-size: 0.72rem;

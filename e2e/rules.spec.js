@@ -33,6 +33,36 @@ async function exportedWorld(page) {
   return JSON.parse(await fs.readFile(await download.path(), "utf8"));
 }
 
+test("棋盘实际重现才显示循环节，编辑和换规则后重新检测", async ({ page }) => {
+  await page.goto("/");
+  const blink = archive({ alive: [[0, -1], [0, 0], [0, 1]] });
+  const period = page.locator("#cyclePeriodValue");
+  const step = page.locator("#stepButton");
+  await importWorld(page, blink);
+  await expect(page.locator("#generationValue")).toHaveText("7");
+  await expect(period).toBeHidden();
+  await step.click();
+  await expect(period).toBeHidden();
+  await step.click();
+  await expect(page.locator("#generationValue")).toHaveText("9");
+  await expect(period).toBeVisible();
+  await expect(period).toHaveText("2 代");
+
+  await page.locator("#lifeCanvas").click({ position: { x: 40, y: 40 } });
+  await expect(period).toBeHidden();
+  await importWorld(page, blink);
+  await expect(page.locator("#generationValue")).toHaveText("7");
+  await page.locator("#speedInput").fill("1000");
+  await page.locator("#runToggle").click();
+  await expect(period).toHaveText("2 代");
+  await expect(page.locator("#statusText")).toHaveText("演化中");
+  await page.locator("#runToggle").click();
+  await expect(period).toHaveText("2 代");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+  await applyRule(page, "B36/S23");
+  await expect(period).toBeHidden();
+});
+
 test("规则输入和三种格式切换必须明确应用，摘要与移动布局同步", async ({ page }, testInfo) => {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
