@@ -180,26 +180,59 @@
       context.stroke();
     }
 
+    function visibleBounds(camera, size, drawSize) {
+      return {
+        minRow: Math.ceil(camera.centerRow - (canvas.height / 2 + drawSize) / size),
+        maxRow: Math.floor(camera.centerRow + canvas.height / 2 / size),
+        minColumn: Math.ceil(camera.centerColumn - (canvas.width / 2 + drawSize) / size),
+        maxColumn: Math.floor(camera.centerColumn + canvas.width / 2 / size),
+      };
+    }
+
     function drawCells(world, camera, ratio) {
       const size = camera.cellSize * ratio;
       const minimumPixel = Math.max(1, ratio);
+      const drawSize = Math.max(minimumPixel, size);
+      const pixels = size < minimumPixel ? new Set() : null;
+      const pixelStride = canvas.width + 2 * Math.ceil(minimumPixel) + 1;
       context.fillStyle = latestDisabled ? "#78b79b" : "#76f2bc";
 
-      for (const key of world.cells) {
-        const separator = key.indexOf(",");
-        const row = Number(key.slice(0, separator));
-        const column = Number(key.slice(separator + 1));
+      function drawCell(row, column) {
         const x = (column - camera.centerColumn) * size + canvas.width / 2;
         const y = (row - camera.centerRow) * size + canvas.height / 2;
-        const drawSize = Math.max(minimumPixel, size);
-        if (x + drawSize < 0 || y + drawSize < 0 || x > canvas.width || y > canvas.height) continue;
+        if (x + drawSize < 0 || y + drawSize < 0 || x > canvas.width || y > canvas.height) return;
 
         if (camera.cellSize >= 2) {
           const inset = Math.max(0.45 * ratio, size * 0.07);
           context.fillRect(x + inset, y + inset, Math.max(minimumPixel, size - inset * 2), Math.max(minimumPixel, size - inset * 2));
         } else {
-          context.fillRect(Math.round(x), Math.round(y), minimumPixel, minimumPixel);
+          const pixelX = Math.round(x);
+          const pixelY = Math.round(y);
+          if (pixels) {
+            const key = pixelY * pixelStride + pixelX;
+            if (pixels.has(key)) return;
+            pixels.add(key);
+          }
+          context.fillRect(pixelX, pixelY, minimumPixel, minimumPixel);
         }
+      }
+
+      if (world.visitVisibleCells) {
+        const drawWholeTile = pixels ? (row, column, width) => {
+          const x = (column - camera.centerColumn) * size + canvas.width / 2;
+          const y = (row - camera.centerRow) * size + canvas.height / 2;
+          const lastX = (column + width - 1 - camera.centerColumn) * size + canvas.width / 2;
+          const lastY = (row + width - 1 - camera.centerRow) * size + canvas.height / 2;
+          if (Math.round(x) !== Math.round(lastX) || Math.round(y) !== Math.round(lastY)) return false;
+          drawCell(row, column);
+          return true;
+        } : null;
+        world.visitVisibleCells(visibleBounds(camera, size, drawSize), drawCell, drawWholeTile);
+        return;
+      }
+      for (const key of world.cells) {
+        const separator = key.indexOf(",");
+        drawCell(Number(key.slice(0, separator)), Number(key.slice(separator + 1)));
       }
     }
 
@@ -209,11 +242,12 @@
       const minimumPixel = Math.max(1, ratio);
       const drawSize = Math.max(minimumPixel, size);
       const { pattern } = placement;
+      const view = visibleBounds(camera, size, drawSize);
       const preview = pattern.cellsIn?.({
-        minRow: Math.ceil(camera.centerRow - (canvas.height / 2 + drawSize) / size) - placement.row,
-        maxRow: Math.floor(camera.centerRow + canvas.height / 2 / size) - placement.row,
-        minColumn: Math.ceil(camera.centerColumn - (canvas.width / 2 + drawSize) / size) - placement.column,
-        maxColumn: Math.floor(camera.centerColumn + canvas.width / 2 / size) - placement.column,
+        minRow: view.minRow - placement.row,
+        maxRow: view.maxRow - placement.row,
+        minColumn: view.minColumn - placement.column,
+        maxColumn: view.maxColumn - placement.column,
       }) ?? pattern.cells;
       let previewed = 0;
 

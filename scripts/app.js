@@ -300,7 +300,7 @@
       ? "当前为康威规则，逻辑电路可正常验证。"
       : "当前为自定义规则：内置图案的行为可能改变；逻辑电路仅适用于 B3/S23，已停用生成与输出锁存。";
     elements.logicCodeButton.disabled = state.world.rule !== Life.DEFAULT_RULE && !state.dialogs.logicGenerationController;
-    const alive = Life.countAlive(cells);
+    const alive = Tiles.describeWorld(cells)?.population ?? Life.countAlive(cells);
     const logicSummary = logicOutputSummary(generation);
     renderer.draw(cells, state.world.camera, state.world.running, state.dialogs.placement, logicAnnotations(generation));
     elements.generation.textContent = formatNumber(generation);
@@ -360,12 +360,12 @@
   function evolveOneGeneration() {
     if (state.dialogs.placement) state.dialogs.placement = null;
     cycleTracker.observe(state.world.cells, state.world.generation);
-    const tiled = state.world.running && state.world.rule === Life.DEFAULT_RULE && !state.world.pruneGliders
+    const tiled = state.world.running && state.world.rule === Life.DEFAULT_RULE
       ? Tiles.nextGeneration(state.world.cells)
       : null;
     state.world.cells = tiled ?? Life.nextGeneration(state.world.cells, state.world.rule);
     if (state.world.pruneGliders && state.world.rule === Life.DEFAULT_RULE) {
-      state.world.cells = Life.pruneOutlyingGliders(state.world.cells);
+      state.world.cells = Tiles.pruneOutlyingGliders(state.world.cells) ?? Life.pruneOutlyingGliders(state.world.cells);
     }
     state.world.generation += 1;
     cycleTracker.observe(state.world.cells, state.world.generation);
@@ -462,7 +462,6 @@
     }
     const changed = state.world.running;
     state.world.running = false;
-    state.world.cells = Tiles.editableWorld(state.world.cells);
     state.world.frameAccumulator = 0;
     state.world.lastFrameTimestamp = null;
     state.world.speedWindowStarted = null;
@@ -477,7 +476,7 @@
     clearTabHold();
     endDrawing();
     state.dialogs.placement = null;
-    if (state.world.rule === Life.DEFAULT_RULE && !state.world.pruneGliders) {
+    if (state.world.rule === Life.DEFAULT_RULE) {
       state.world.cells = Tiles.prepare(state.world.cells);
     }
     state.world.running = true;
@@ -975,6 +974,7 @@
       showToast("请先暂停，再绘制细胞");
       return;
     }
+    state.world.cells = Tiles.editableWorld(state.world.cells);
     const coordinate = renderer.coordinateFromPointer(event, state.world.camera);
     state.pointer.drawingPointerId = event.pointerId;
     state.pointer.drawAlive = !Life.isAlive(state.world.cells, coordinate.row, coordinate.column);
@@ -1247,8 +1247,9 @@
     state.world.pruneGliders = elements.pruneGliders.checked;
     cycleTracker.reset();
     if (state.world.pruneGliders && state.world.rule === Life.DEFAULT_RULE) {
-      state.world.cells = Life.pruneOutlyingGliders(Tiles.editableWorld(state.world.cells));
-    } else if (state.world.running && state.world.rule === Life.DEFAULT_RULE) {
+      state.world.cells = Tiles.pruneOutlyingGliders(state.world.cells) ?? Life.pruneOutlyingGliders(state.world.cells);
+    }
+    if (state.world.running && state.world.rule === Life.DEFAULT_RULE) {
       state.world.cells = Tiles.prepare(state.world.cells);
     }
     render();
