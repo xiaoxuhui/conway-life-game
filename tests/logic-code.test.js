@@ -622,10 +622,24 @@ test("多层 AND、OR、NOT 保留后序步骤并限制嵌套深度", () => {
   ]);
   const pattern = LogicCode.composePattern(command, Presets.getPreset, Presets.getLogicGateKit);
   assert.equal(pattern.connectionCount, 2);
-  assert.throws(
-    () => LogicCode.parse("NOT(NOT(NOT(NOT(NOT(NOT(NOT(NOT(NOT(0)))))))))"),
-    /最多支持 8 层/,
-  );
+  for (const depth of [8, 9, 16, 32]) {
+    const source = "NOT(".repeat(depth) + "0" + ")".repeat(depth);
+    assert.equal(LogicCode.parse(source).steps.length, depth);
+  }
+  assert.throws(() => LogicCode.parse("NOT(".repeat(33) + "0" + ")".repeat(33)), /最多支持 32 层/);
+});
+
+test("保存函数的调用链允许 32 层，仍拒绝第 33 层和循环", () => {
+  const definitions = Array.from({ length: 33 }, (_, index) => ({
+    callName: `F${index}`,
+    inputs: [{ name: "A" }],
+    code: index === 0 ? "NOT(A)" : `NOT(F${index - 1}(A))`,
+  }));
+  const expanded = LogicCode.expandFunctions("F31(0)", definitions);
+  assert.equal(LogicCode.parseExpanded(expanded).steps.length, 32);
+  assert.throws(() => LogicCode.expandFunctions("F32(0)", definitions), /最多支持 32 层/);
+  definitions[0].code = "F1(A)";
+  assert.throws(() => LogicCode.expandFunctions("F1(0)", definitions), /循环引用/);
 });
 
 test("枪体安全验证器对任意候选失败关闭", () => {

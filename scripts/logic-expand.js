@@ -7,6 +7,7 @@
 
   const { LogicCodeError, MAX_SOURCE_LENGTH, MAX_EXPANDED_LENGTH, splitProgram,
     parseFunctionExpression, parse, parseExpanded, collectVariableNames } = LogicParse;
+  const MAX_CALL_DEPTH = 32;
 
   function expandFunctions(value, definitions = []) {
     const source = typeof value === "string" ? value.trim() : "";
@@ -77,7 +78,9 @@
           continue;
         }
         if (stack.includes(callName)) throw new LogicCodeError(`函数 ${callName} 存在循环引用`);
-        if (stack.length >= 8) throw new LogicCodeError("保存函数嵌套太深，最多支持 8 层");
+        if (stack.length >= MAX_CALL_DEPTH) {
+          throw new LogicCodeError(`保存函数嵌套太深，最多支持 ${MAX_CALL_DEPTH} 层`);
+        }
         if (args.length !== custom.inputs.length) {
           throw new LogicCodeError(`函数 ${callName} 需要 ${custom.inputs.length} 个参数`);
         }

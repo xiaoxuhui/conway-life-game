@@ -14,6 +14,7 @@
 
   const MAX_SOURCE_LENGTH = 200;
   const MAX_EXPANDED_LENGTH = 5000;
+  const MAX_GATE_DEPTH = 32;
   const SAFETY_SLICE_BUDGET_MS = 40;
 
   function gateName(token) {
@@ -109,22 +110,18 @@
       return node.gate && node.gate !== "NOT" ? `(${node.expression})` : node.expression;
     }
 
-    function logicDepth(node) {
-      if (!node.gate) return 0;
-      return 1 + Math.max(...node.children.map(logicDepth));
-    }
-
     function leaf(value, expression, variable) {
       return Object.freeze({
         value, expression, ...(variable ? { variable } : {}), gate: null,
-        children: Object.freeze([]), steps: Object.freeze([]),
+        children: Object.freeze([]), steps: Object.freeze([]), depth: 0,
       });
     }
 
     function gateNode(gate, left, right = null) {
       const children = gate === "NOT" ? [left] : [left, right];
-      if (1 + Math.max(...children.map(logicDepth)) > 8) {
-        throw new LogicCodeError("嵌套太深，最多支持 8 层逻辑门");
+      const depth = 1 + Math.max(...children.map((child) => child.depth));
+      if (depth > MAX_GATE_DEPTH) {
+        throw new LogicCodeError(`嵌套太深，最多支持 ${MAX_GATE_DEPTH} 层逻辑门`);
       }
       const inputs = children.map((child) => child.value);
       const expression = gate === "NOT"
@@ -137,6 +134,7 @@
         value: step.expected,
         expression,
         gate,
+        depth,
         children: Object.freeze(children),
         steps: Object.freeze(steps),
         step,
