@@ -33,6 +33,38 @@ async function exportedWorld(page) {
   return JSON.parse(await fs.readFile(await download.path(), "utf8"));
 }
 
+test("跳步只按完整间隔显示，循环节及时出现且暂停后可单步", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"));
+  await page.goto("/");
+  const generation = page.locator("#generationValue");
+  const period = page.locator("#cyclePeriodValue");
+  const run = page.locator("#runToggle");
+  const jumpSize = page.getByRole("spinbutton", { name: "跳步" });
+  await importWorld(page, archive({ alive: [[0, -1], [0, 0], [0, 1]] }));
+  await expect(generation).toHaveText("7");
+  await expect(jumpSize).toHaveValue("1");
+  await page.locator("#speedInput").fill("10");
+  await jumpSize.fill("4");
+  await run.click();
+
+  await page.clock.runFor(270);
+  await expect(period).toHaveText("2 代");
+  await expect(generation).toHaveText("7");
+  await page.clock.runFor(180);
+  await expect(generation).toHaveText("11");
+  await page.clock.runFor(100);
+  await expect(generation).toHaveText("11");
+
+  await run.click();
+  await expect(generation).toHaveText("12");
+  await page.keyboard.press("Tab");
+  await expect(generation).toHaveText("13");
+  await page.locator("#stepButton").click();
+  await expect(generation).toHaveText("14");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+});
+
 test("棋盘实际重现才显示循环节，编辑和换规则后重新检测", async ({ page }) => {
   await page.goto("/");
   const blink = archive({ alive: [[0, -1], [0, 0], [0, 1]] });

@@ -264,6 +264,10 @@ body.is-running .button-primary {
   white-space: nowrap;
 }
 
+.jump-control {
+  margin-top: 8px;
+}
+
 .speed-input-row {
   display: flex;
   align-items: center;
