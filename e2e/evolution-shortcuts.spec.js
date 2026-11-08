@@ -2,7 +2,7 @@
 
 const { test, expect } = require("@playwright/test");
 
-test("Tab 在棋盘内单步，T 开始或暂停，长按只触发一次", async ({ page }) => {
+test("轻按 Tab 在棋盘内单步，T 开始或暂停", async ({ page }) => {
   await page.goto("/");
   const canvas = page.locator("#lifeCanvas");
   const generation = page.locator("#generationValue");
@@ -11,6 +11,7 @@ test("Tab 在棋盘内单步，T 开始或暂停，长按只触发一次", async
 
   await page.keyboard.down("Tab");
   await page.keyboard.down("Tab");
+  await expect(generation).toHaveText("0");
   await page.keyboard.up("Tab");
   await expect(generation).toHaveText("1");
   await expect(canvas).toBeFocused();
@@ -21,8 +22,31 @@ test("Tab 在棋盘内单步，T 开始或暂停，长按只触发一次", async
   await page.keyboard.down("t");
   await page.keyboard.up("t");
   await expect(status).toHaveText("演化中");
+  await page.keyboard.press("Tab");
+  await expect(status).toHaveText("演化中");
   await page.keyboard.press("T");
   await expect(status).toHaveText("已暂停");
+});
+
+test("长按 Tab 连续演化，松键或画布失焦时暂停", async ({ page }) => {
+  await page.goto("/");
+  const canvas = page.locator("#lifeCanvas");
+  const generation = page.locator("#generationValue");
+  const status = page.locator("#statusText");
+  await canvas.focus();
+  await page.keyboard.down("Tab");
+  await expect(status).toHaveText("演化中");
+  await expect.poll(async () => Number(await generation.textContent())).toBeGreaterThan(1);
+  await page.keyboard.up("Tab");
+  await expect(status).toHaveText("已暂停");
+
+  await page.keyboard.down("Tab");
+  await expect(status).toHaveText("演化中");
+  await page.locator("#importGollyButton").focus();
+  await expect(status).toHaveText("已暂停");
+  const pausedAt = await generation.textContent();
+  await page.keyboard.up("Tab");
+  await expect(generation).toHaveText(pausedAt);
 });
 
 test("Shift+Tab 可离开棋盘，表单中的 T 和 Tab 保留原生行为", async ({ page }) => {

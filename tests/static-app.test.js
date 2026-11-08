@@ -97,7 +97,7 @@ test("主页批量备份注入并加载可回读校验的保存模块", () => {
 });
 
 test("演化速度使用可手动输入的数字框并公开有效范围", () => {
-  assert.match(html, /id=["']speedInput["'][^>]*type=["']number["'][^>]*min=["']1["'][^>]*max=["']1000["'][^>]*step=["']1["']/);
+  assert.match(html, /id=["']speedInput["'][^>]*type=["']number["'][^>]*min=["']1["'][^>]*max=["']10000["'][^>]*step=["']1["']/);
   assert.doesNotMatch(html, /id=["']speedRange["']/);
   assert.match(html, /id=["']speedUnit["'][^>]*>代\/秒</);
   assert.match(html, /id=["']actualSpeedValue["']/);

@@ -14,6 +14,7 @@
   const RANDOM_DENSITY = 0.25;
   const MAX_IMPORT_BYTES = 1_000_000;
   const ZOOM_STEP = 1.5;
+  const TAB_HOLD_MS = 350;
 
   const elements = {
     ruleForm: document.querySelector("#ruleForm"),
@@ -144,6 +145,8 @@
 
   const renderer = RendererModule.create(elements.canvas);
   const cycleTracker = Life.createCycleTracker();
+  let tabHoldTimer = null;
+  let runningFromTab = false;
   // 状态按职责分为 world（演化/视图）/ pointer（指针与手势）/ dialogs（对话框与瞬时 UI 模式）/ storage（持久化库）四个子对象，
   // 便于维护；所有访问点已同步改为 state.<group>.<field>，行为与原扁平结构完全一致。
   const state = {
@@ -386,7 +389,23 @@
     state.world.animationFrame = window.requestAnimationFrame(runAnimationFrame);
   }
 
+  function clearTabHold() {
+    if (tabHoldTimer !== null) window.clearTimeout(tabHoldTimer);
+    tabHoldTimer = null;
+    runningFromTab = false;
+  }
+
+  function endTabHold(stepOnTap = false) {
+    if (runningFromTab) {
+      stop();
+    } else if (tabHoldTimer !== null) {
+      clearTabHold();
+      if (stepOnTap) advance();
+    }
+  }
+
   function stop(options = {}) {
+    clearTabHold();
     if (state.world.animationFrame !== null) {
       window.cancelAnimationFrame(state.world.animationFrame);
       state.world.animationFrame = null;
@@ -404,6 +423,7 @@
 
   function start() {
     if (state.world.running) return;
+    clearTabHold();
     state.dialogs.placement = null;
     state.world.running = true;
     state.world.frameAccumulator = 0;
@@ -1085,7 +1105,12 @@
       if (!event.repeat) toggleRun();
     } else if (plainKey && event.key === "Tab" && !event.shiftKey && event.target === elements.canvas) {
       event.preventDefault();
-      if (!event.repeat && !state.world.running) advance();
+      if (!event.repeat && !state.world.running && tabHoldTimer === null) {
+        tabHoldTimer = window.setTimeout(() => {
+          start();
+          runningFromTab = true;
+        }, TAB_HOLD_MS);
+      }
     } else if (event.code === "Space") {
       event.preventDefault();
       if (event.repeat) return;
@@ -1105,6 +1130,11 @@
   }
 
   function handleKeyUp(event) {
+    if (event.key === "Tab" && (tabHoldTimer !== null || runningFromTab)) {
+      event.preventDefault();
+      endTabHold(true);
+      return;
+    }
     if (event.code !== "Space" || !state.pointer.spaceDown) return;
     event.preventDefault();
     state.pointer.spaceDown = false;
@@ -1245,6 +1275,7 @@
   elements.speed.addEventListener("input", () => applySpeedInput(false));
   elements.speed.addEventListener("change", () => applySpeedInput(true));
   elements.speed.addEventListener("blur", () => applySpeedInput(true));
+  elements.canvas.addEventListener("blur", () => endTabHold());
   elements.canvas.addEventListener("pointerdown", handlePointerDown);
   elements.canvas.addEventListener("pointermove", handlePointerMove);
   elements.canvas.addEventListener("pointerup", (event) => releasePointer(event));
@@ -1254,12 +1285,15 @@
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keyup", handleKeyUp);
   window.addEventListener("blur", () => {
+    endTabHold();
     state.pointer.spaceDown = false;
     state.pointer.spaceDragged = false;
     updateCursorClasses();
   });
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && state.world.running) stop({ message: "页面隐藏，已自动暂停" });
+    if (!document.hidden) return;
+    if (state.world.running) stop({ message: "页面隐藏，已自动暂停" });
+    else endTabHold();
   });
 
   Dialog.initializePatternLibrary();

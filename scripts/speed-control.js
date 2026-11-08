@@ -6,7 +6,7 @@
   "use strict";
 
   const MIN_SPEED = 1;
-  const MAX_SPEED = 1000;
+  const MAX_SPEED = 10_000;
   const DEFAULT_SPEED = 5;
   const FRAME_COMPUTE_BUDGET_MS = 10;
   const MAX_FRAME_DELTA_MS = 250;
