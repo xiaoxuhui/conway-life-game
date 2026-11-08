@@ -364,3 +364,8 @@
 - **Definition of Done**: Node 测试覆盖快速生成的门链、同轴双门和分支；桌面和移动 Chromium 验证快速放置、完整验证和取消。
 - **Files**: scripts/logic-code.js, scripts/app.js, index.html, styles/main.css, tests/logic-code.test.js, e2e/app.smoke.spec.js, e2e/rules.spec.js.
 - **Evidence**: `node --test tests/logic-code.test.js tests/static-app.test.js` 通过 52 项。桌面与移动 Chromium 的 `e2e/app.smoke.spec.js` 和 `e2e/rules.spec.js` 通过 24 项，覆盖默认快速放置、手动完整验证和取消。语法检查、ESLint 和 `git diff --check` 通过。本机生成 32 门链和 15 门分支分别耗时约 71 ms 和 247 ms，计时包含布线与图案构建。
+
+## 逻辑代码共享输入 `[PENDING]`
+
+- 每个有名变量只放一座输入枪。重复端口用真实 p30 分流器和转向组件连接，保留表达式中的独立基础门。
+- 验收包含单个门的重复输入和多门表达式。核对枪的数量、真实输入和最终输出，至少验证一例移除源枪后下游信号消失。保留快速预览和可选逐代验证。
