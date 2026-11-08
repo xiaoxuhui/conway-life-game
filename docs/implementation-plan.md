@@ -354,12 +354,13 @@
 - [x] 覆盖 XOR 边枚举、正常成功零反射、强制进入反射阶段和完整安全失败关闭
 # 快速生成逻辑结构
 
-- **Status**: PENDING
+- **Status**: VERIFIED
 - **Approved**: 2026-11-08 用户要求跳过耗时的安全线路验证。
 - **Type**: feature
 
-## IG1 快速生成与可选验证 `[PENDING]`
+## IG1 快速生成与可选验证 `[VERIFIED]`
 
 - **Objective**: 网页默认生成几何候选，用户可勾选逐代验证。
 - **Definition of Done**: Node 测试覆盖快速生成的门链、同轴双门和分支；桌面和移动 Chromium 验证快速放置、完整验证和取消。
 - **Files**: scripts/logic-code.js, scripts/app.js, index.html, styles/main.css, tests/logic-code.test.js, e2e/app.smoke.spec.js, e2e/rules.spec.js.
+- **Evidence**: `node --test tests/logic-code.test.js tests/static-app.test.js` 通过 52 项。桌面与移动 Chromium 的 `e2e/app.smoke.spec.js` 和 `e2e/rules.spec.js` 通过 24 项，覆盖默认快速放置、手动完整验证和取消。语法检查、ESLint 和 `git diff --check` 通过。本机生成 32 门链和 15 门分支分别耗时约 71 ms 和 247 ms，计时包含布线与图案构建。
