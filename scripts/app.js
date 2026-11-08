@@ -50,6 +50,8 @@
     cyclePeriod: document.querySelector("#cyclePeriodValue"),
     importButton: document.querySelector("#importButton"),
     importInput: document.querySelector("#importInput"),
+    importGollyButton: document.querySelector("#importGollyButton"),
+    importGollyInput: document.querySelector("#importGollyInput"),
     loadPreset: document.querySelector("#loadPresetButton"),
     logicCodeButton: document.querySelector("#logicCodeButton"),
     logicCodeFeedback: document.querySelector("#logicCodeFeedback"),
@@ -779,6 +781,25 @@
     }
   }
 
+  async function importGollyPattern(file) {
+    if (!file) return;
+    elements.importGollyButton.disabled = true;
+    try {
+      const pattern = await window.GollyImport.readFile(file);
+      if (pattern.rule && pattern.rule !== state.world.rule) {
+        throw new Error(`图案使用 ${pattern.rule}，请先切换棋盘规则再导入`);
+      }
+      if (state.dialogs.logicGenerationController) throw new Error("请先完成或取消正在生成的逻辑结构");
+      state.dialogs.placement = placementAtCameraCenter(pattern);
+      stop();
+      showToast(`已读取 ${pattern.name}，请在观察区选择放置位置。`, { duration: 5000 });
+    } catch (error) {
+      showToast(`Golly 图案导入失败。${error.message}`, { duration: 5000 });
+    } finally {
+      elements.importGollyButton.disabled = false;
+    }
+  }
+
   function rememberStrokeCell(row, column) {
     const key = Life.coordinateKey(row, column);
     if (!state.pointer.strokeOriginal.has(key)) {
@@ -1049,6 +1070,7 @@
   function handleKeyDown(event) {
     if (ignoresGlobalShortcut()) return;
     if (document.activeElement?.tagName === "BUTTON" && event.code === "Space") return;
+    const plainKey = !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing;
     if (state.dialogs.placement && event.key === "Escape") {
       event.preventDefault();
       finishPlacement();
@@ -1058,6 +1080,12 @@
     } else if (state.dialogs.placement && event.key.toLowerCase() === "f") {
       event.preventDefault();
       transformPlacement(Presets.flipPattern);
+    } else if (plainKey && event.key.toLowerCase() === "t" && !document.activeElement?.closest("dialog")) {
+      event.preventDefault();
+      if (!event.repeat) toggleRun();
+    } else if (plainKey && event.key === "Tab" && !event.shiftKey && event.target === elements.canvas) {
+      event.preventDefault();
+      if (!event.repeat && !state.world.running) advance();
     } else if (event.code === "Space") {
       event.preventDefault();
       if (event.repeat) return;
@@ -1198,6 +1226,12 @@
   elements.importInput.addEventListener("change", async () => {
     await importWorld(elements.importInput.files?.[0]);
     elements.importInput.value = "";
+  });
+  elements.importGollyButton.addEventListener("click", () => elements.importGollyInput.click());
+  elements.importGollyInput.addEventListener("change", () => {
+    const file = elements.importGollyInput.files?.[0];
+    elements.importGollyInput.value = "";
+    void importGollyPattern(file);
   });
   function applySpeedInput(normalizeField = false) {
     if (!normalizeField && !SpeedControl.isValidInput(elements.speed.value)) return;
