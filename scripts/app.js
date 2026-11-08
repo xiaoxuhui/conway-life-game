@@ -49,6 +49,7 @@
     generation: document.querySelector("#generationValue"),
     cycleReadout: document.querySelector("#cycleReadout"),
     cyclePeriod: document.querySelector("#cyclePeriodValue"),
+    pruneGliders: document.querySelector("#pruneGliders"),
     importButton: document.querySelector("#importButton"),
     importInput: document.querySelector("#importInput"),
     importGollyButton: document.querySelector("#importGollyButton"),
@@ -155,6 +156,7 @@
       cells: Life.createWorld(),
       generation: 0,
       running: false,
+      pruneGliders: false,
       speed: SpeedControl.DEFAULT_SPEED,
       animationFrame: null,
       frameAccumulator: 0,
@@ -274,6 +276,8 @@
 
   function render() {
     const rule = Life.parseRule(state.world.rule);
+    elements.pruneGliders.disabled = rule.canonical !== Life.DEFAULT_RULE;
+    elements.pruneGliders.checked = state.world.pruneGliders;
     elements.activeRule.textContent = Life.formatRule(state.world.rule, elements.ruleNotation.value);
     elements.ruleBirth.textContent = [...rule.birth].join("、") || "无";
     elements.ruleSurvival.textContent = [...rule.survival].join("、") || "无";
@@ -345,6 +349,9 @@
     if (state.dialogs.placement) state.dialogs.placement = null;
     cycleTracker.observe(state.world.cells, state.world.generation);
     state.world.cells = Life.nextGeneration(state.world.cells, state.world.rule);
+    if (state.world.pruneGliders && state.world.rule === Life.DEFAULT_RULE) {
+      state.world.cells = Life.pruneOutlyingGliders(state.world.cells);
+    }
     state.world.generation += 1;
     cycleTracker.observe(state.world.cells, state.world.generation);
     updateLogicOutputs();
@@ -1158,6 +1165,14 @@
     if (!elements.importAllRecordsDialog.open) Dialog.resetAllRecordsImport();
   });
   elements.step.addEventListener("click", advance);
+  elements.pruneGliders.addEventListener("change", () => {
+    state.world.pruneGliders = elements.pruneGliders.checked;
+    cycleTracker.reset();
+    if (state.world.pruneGliders && state.world.rule === Life.DEFAULT_RULE) {
+      state.world.cells = Life.pruneOutlyingGliders(state.world.cells);
+    }
+    render();
+  });
   elements.ruleForm.addEventListener("submit", applyRule);
   elements.ruleNotation.addEventListener("change", changeRuleNotation);
   elements.ruleInput.addEventListener("input", clearRuleError);

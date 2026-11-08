@@ -154,6 +154,100 @@
     return { cells: nextCellSet(world.cells, rule) };
   }
 
+  function gliderMask(coordinates) {
+    const top = Math.min(...coordinates.map(([row]) => row));
+    const left = Math.min(...coordinates.map(([, column]) => column));
+    let mask = 0;
+    for (const [row, column] of coordinates) {
+      if (row - top > 2 || column - left > 2) return 0;
+      mask |= 1 << ((row - top) * 3 + (column - left));
+    }
+    return mask;
+  }
+
+  function createGliderMasks() {
+    const masks = new Set();
+    let cells = createWorld([[0, 1], [1, 2], [2, 0], [2, 1], [2, 2]]).cells;
+    for (let phase = 0; phase < 4; phase += 1) {
+      const coordinates = [...cells].map(parseKey);
+      for (const rowSign of [-1, 1]) {
+        for (const columnSign of [-1, 1]) {
+          masks.add(gliderMask(coordinates.map(([row, column]) => [rowSign * row, columnSign * column])));
+          masks.add(gliderMask(coordinates.map(([row, column]) => [rowSign * column, columnSign * row])));
+        }
+      }
+      cells = nextCellSet(cells);
+    }
+    return masks;
+  }
+
+  const gliderMasks = createGliderMasks();
+
+  function extremeCellKeys(cells) {
+    let minRow = Infinity;
+    let maxRow = -Infinity;
+    let minColumn = Infinity;
+    let maxColumn = -Infinity;
+    const keys = {};
+    for (const key of cells) {
+      const [row, column] = parseKey(key);
+      if (row < minRow) {
+        minRow = row;
+        keys.top = key;
+      }
+      if (row > maxRow) {
+        maxRow = row;
+        keys.bottom = key;
+      }
+      if (column < minColumn) {
+        minColumn = column;
+        keys.left = key;
+      }
+      if (column > maxColumn) {
+        maxColumn = column;
+        keys.right = key;
+      }
+    }
+    return new Set(Object.values(keys));
+  }
+
+  function gliderComponent(cells, seed) {
+    const component = new Map([[seed, parseKey(seed)]]);
+    for (const [row, column] of component.values()) {
+      for (let y = row - 1; y <= row + 1; y += 1) {
+        for (let x = column - 1; x <= column + 1; x += 1) {
+          const key = coordinateKey(y, x);
+          if (!cells.has(key) || component.has(key)) continue;
+          if (component.size === 5) return null;
+          component.set(key, [y, x]);
+        }
+      }
+    }
+    return component.size === 5 && gliderMasks.has(gliderMask([...component.values()])) ? component : null;
+  }
+
+  function pruneOutlyingGliders(world) {
+    assertWorld(world);
+    if (world.cells.size <= 5) return world;
+    // A glider outside the remainder's bounds must own at least one whole outer edge.
+    const seeds = extremeCellKeys(world.cells);
+    let remaining = world;
+    for (const seed of seeds) {
+      const glider = gliderComponent(world.cells, seed);
+      if (!glider) continue;
+      for (const key of glider.keys()) seeds.delete(key);
+      const rectangle = cellBounds(world.cells, glider);
+      const hasCellInside = [...glider.values()].some(([row, column]) =>
+        row >= rectangle.minRow && row <= rectangle.maxRow
+        && column >= rectangle.minColumn && column <= rectangle.maxColumn,
+      );
+      if (hasCellInside) continue;
+      if (remaining === world) remaining = cloneWorld(world);
+      for (const key of glider.keys()) remaining.cells.delete(key);
+    }
+    return remaining;
+  }
+
   function sameCells(left, right) {
     if (left.size !== right.size) return false;
     for (const key of left) {
@@ -298,19 +392,23 @@
 
   function bounds(world) {
     assertWorld(world);
-    if (world.cells.size === 0) return null;
+    return cellBounds(world.cells);
+  }
+
+  function cellBounds(cells, excluded) {
     let minRow = Infinity;
     let maxRow = -Infinity;
     let minColumn = Infinity;
     let maxColumn = -Infinity;
-    for (const key of world.cells) {
+    for (const key of cells) {
+      if (excluded?.has(key)) continue;
       const [row, column] = parseKey(key);
       minRow = Math.min(minRow, row);
       maxRow = Math.max(maxRow, row);
       minColumn = Math.min(minColumn, column);
       maxColumn = Math.max(maxColumn, column);
     }
-    return { minRow, maxRow, minColumn, maxColumn };
+    return minRow === Infinity ? null : { minRow, maxRow, minColumn, maxColumn };
   }
 
   function normalizeView(view = DEFAULT_VIEW) {
@@ -401,6 +499,7 @@
     nextGeneration,
     parseRule,
     placePattern,
+    pruneOutlyingGliders,
     randomWorld,
     serialize,
     setCell,
