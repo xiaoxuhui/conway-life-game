@@ -77,6 +77,47 @@ test("滑翔机跨越原固定边界后仍向右下移动", () => {
   assert.deepEqual(coordinates(world), ["-40,61", "-39,62", "-38,60", "-38,61", "-38,62"]);
 });
 
+test("离群清理识别所有滑翔机方向和相位，保留原始世界", () => {
+  const block = [[0, 0], [0, 1], [1, 0], [1, 1]];
+  let pattern = getPreset("glider");
+  for (let direction = 0; direction < 4; direction += 1) {
+    for (const orientation of [pattern, flipPattern(pattern)]) {
+      let glider = Life.placePattern(Life.createWorld(), orientation.cells, -20, Life.MAX_COORDINATE - 8);
+      for (let phase = 0; phase < 4; phase += 1) {
+        const world = Life.createWorld([...block, ...Life.aliveCoordinates(glider)]);
+        assert.deepEqual(Life.aliveCoordinates(Life.pruneOutlyingGliders(world)), block);
+        assert.equal(Life.countAlive(world), 9);
+        glider = Life.nextGeneration(glider);
+      }
+    }
+    pattern = rotatePattern(pattern);
+  }
+});
+
+test("包围矩形逐格判断，边界算内部，空矩形和相连图案均保留", () => {
+  const glider = getPreset("glider").cells;
+  const corner = [[0, -10], [-10, 0]];
+  const outside = Life.createWorld([...corner, ...glider]);
+  assert.deepEqual(coordinates(Life.pruneOutlyingGliders(outside)), ["-10,0", "0,-10"]);
+  for (const cells of [
+    glider,
+    [[0, -10], [-10, 1], ...glider],
+    [[-10, -10], [10, 10], ...glider],
+    [[-10, -10], [3, 3], ...glider],
+    [[-10, -10], [0, 0], [0, 1], [0, 2], [1, 1], [2, 1]],
+  ]) {
+    const world = Life.createWorld(cells);
+    assert.strictEqual(Life.pruneOutlyingGliders(world), world);
+  }
+});
+
+test("多个候选各自用同一代的剩余细胞判断", () => {
+  const glider = getPreset("glider").cells;
+  const world = Life.placePattern(Life.createWorld(glider), glider, 10, 10, false);
+  assert.equal(Life.countAlive(Life.pruneOutlyingGliders(world)), 0);
+  assert.equal(Life.countAlive(world), 10);
+});
+
 test("计算下一代不会修改输入世界", () => {
   const world = Life.createWorld([[1, 2], [2, 2], [3, 2]]);
   const snapshot = coordinates(world);
