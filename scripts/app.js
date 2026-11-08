@@ -46,6 +46,8 @@
     closeImportAllRecords: document.querySelector("#closeImportAllRecordsButton"),
     fitView: document.querySelector("#fitViewButton"),
     generation: document.querySelector("#generationValue"),
+    cycleReadout: document.querySelector("#cycleReadout"),
+    cyclePeriod: document.querySelector("#cyclePeriodValue"),
     importButton: document.querySelector("#importButton"),
     importInput: document.querySelector("#importInput"),
     loadPreset: document.querySelector("#loadPresetButton"),
@@ -139,6 +141,7 @@
   };
 
   const renderer = RendererModule.create(elements.canvas);
+  const cycleTracker = Life.createCycleTracker();
   // 状态按职责分为 world（演化/视图）/ pointer（指针与手势）/ dialogs（对话框与瞬时 UI 模式）/ storage（持久化库）四个子对象，
   // 便于维护；所有访问点已同步改为 state.<group>.<field>，行为与原扁平结构完全一致。
   const state = {
@@ -276,6 +279,10 @@
     const alive = Life.countAlive(state.world.cells);
     renderer.draw(state.world.cells, state.world.camera, state.world.running, state.dialogs.placement, logicAnnotations());
     elements.generation.textContent = formatNumber(state.world.generation);
+    const period = cycleTracker.period;
+    elements.cycleReadout.hidden = period === null;
+    const periodText = period === null ? "" : `${formatNumber(period)} 代`;
+    if (elements.cyclePeriod.textContent !== periodText) elements.cyclePeriod.textContent = periodText;
     elements.alive.textContent = formatNumber(alive);
     elements.actualSpeed.textContent = `${formatNumber(state.world.actualSpeed)}/s`;
     elements.zoomValue.textContent = formatZoom(state.world.camera.cellSize);
@@ -331,8 +338,10 @@
 
   function evolveOneGeneration() {
     if (state.dialogs.placement) state.dialogs.placement = null;
+    cycleTracker.observe(state.world.cells, state.world.generation);
     state.world.cells = Life.nextGeneration(state.world.cells, state.world.rule);
     state.world.generation += 1;
+    cycleTracker.observe(state.world.cells, state.world.generation);
     updateLogicOutputs();
   }
 
@@ -426,6 +435,7 @@
 
   function resetWith(world, message, shouldFit = true) {
     stop();
+    cycleTracker.reset();
     state.dialogs.placement = null;
     state.world.cells = world;
     state.world.generation = 0;
@@ -440,6 +450,7 @@
     if (Life.countAlive(state.world.cells) === 0) return;
     const wasRunning = state.world.running;
     stop();
+    cycleTracker.reset();
     state.dialogs.placement = null;
     state.world.undoSnapshot = {
       world: Life.cloneWorld(state.world.cells),
@@ -458,6 +469,7 @@
   function undoClear() {
     if (!state.world.undoSnapshot) return;
     const snapshot = state.world.undoSnapshot;
+    cycleTracker.reset();
     state.world.undoSnapshot = null;
     state.world.cells = snapshot.world;
     state.world.generation = snapshot.generation;
@@ -567,6 +579,7 @@
     try { rule = Life.parseRule(elements.ruleInput.value); }
     catch (error) { showRuleError(error); return; }
     stop();
+    if (state.world.rule !== rule.canonical) cycleTracker.reset();
     state.world.rule = rule.canonical;
     cancelLogicForRuleChange();
     syncRuleDraft();
@@ -749,6 +762,7 @@
     try {
       const restored = Life.deserialize(await file.text());
       stop();
+      cycleTracker.reset();
       state.world.rule = restored.rule;
       cancelLogicForRuleChange();
       syncRuleDraft();
@@ -779,6 +793,7 @@
     if (state.pointer.painted.has(key)) return;
     rememberStrokeCell(coordinate.row, coordinate.column);
     state.pointer.painted.add(key);
+    if (state.pointer.strokeOriginal.get(key) !== state.pointer.drawAlive) cycleTracker.reset();
     Life.setCell(state.world.cells, coordinate.row, coordinate.column, state.pointer.drawAlive);
     state.world.logicOutputs = [];
     state.world.undoSnapshot = null;
@@ -813,6 +828,7 @@
         state.dialogs.placement.column,
         false,
       );
+      cycleTracker.reset();
       state.world.generation = 0;
       const logic = state.world.rule === Life.DEFAULT_RULE ? state.dialogs.placement.pattern.logic : null;
       if (logic) {
@@ -857,6 +873,7 @@
   function endDrawing(revert = false) {
     if (state.pointer.drawingPointerId === null) return;
     if (revert) {
+      cycleTracker.reset();
       for (const [key, alive] of state.pointer.strokeOriginal) {
         const separator = key.indexOf(",");
         const row = Number(key.slice(0, separator));

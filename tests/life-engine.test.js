@@ -17,6 +17,42 @@ function advance(world, steps) {
   return result;
 }
 
+test("循环节检查绝对坐标，按实际重复代数识别静物、闪烁器和滑翔机", () => {
+  const tracker = Life.createCycleTracker();
+  const periodAfter = (cells, steps) => {
+    tracker.reset();
+    let world = Life.createWorld(cells);
+    tracker.observe(world, 15);
+    for (let generation = 16; generation <= 15 + steps; generation += 1) {
+      world = Life.nextGeneration(world);
+      tracker.observe(world, generation);
+    }
+    return tracker.period;
+  };
+  assert.equal(periodAfter([[-1, -1], [-1, 0], [0, -1], [0, 0]], 1), 1);
+  assert.equal(periodAfter([[0, -1], [0, 0], [0, 1]], 1), null);
+  assert.equal(periodAfter([[0, -1], [0, 0], [0, 1]], 2), 2);
+  assert.equal(periodAfter(getPreset("glider").cells, 40), null);
+});
+
+test("循环跟踪超出快照窗口后仍可确认周期，重置后丢弃旧记录", () => {
+  const tracker = Life.createCycleTracker({ maxSnapshots: 2 });
+  // One transient followed by a deterministic seven-state cycle.
+  for (let generation = 0; generation <= 30; generation += 1) {
+    const world = Life.createWorld([[0, generation ? (generation - 1) % 7 : -1]]);
+    tracker.observe(world, generation);
+  }
+  assert.equal(tracker.period, 7);
+  tracker.reset();
+  assert.equal(tracker.period, null);
+  const afterEdit = Life.createWorld([[0, 1], [1, 0]]);
+  tracker.observe(afterEdit, 31);
+  tracker.observe(afterEdit, 31);
+  assert.equal(tracker.period, null);
+  tracker.observe(Life.createWorld([[1, 0], [0, 1]]), 32);
+  assert.equal(tracker.period, 1, "集合插入顺序不影响比较");
+});
+
 test("空世界和单细胞按规则死亡", () => {
   assert.equal(Life.countAlive(Life.nextGeneration(Life.createWorld())), 0);
   assert.equal(Life.countAlive(Life.nextGeneration(Life.createWorld([[-200, 700]]))), 0);
