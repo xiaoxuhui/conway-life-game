@@ -970,10 +970,18 @@
     updateCursorClasses();
   }
 
+  function focusBoard() {
+    elements.canvas.focus({ preventScroll: true });
+  }
+
+  function focusBoardAfterClick(event) {
+    if (event.detail > 0) focusBoard();
+  }
+
   function handlePointerDown(event) {
     if (![0, 1, 2].includes(event.button) && event.pointerType !== "touch") return;
     event.preventDefault();
-    elements.canvas.focus({ preventScroll: true });
+    focusBoard();
 
     if (state.dialogs.placement && event.pointerType !== "touch" && event.button === 2) {
       finishPlacement();
@@ -1110,8 +1118,10 @@
     } else if (plainKey && event.key.toLowerCase() === "t" && !document.activeElement?.closest("dialog")) {
       event.preventDefault();
       if (!event.repeat) toggleRun();
-    } else if (plainKey && event.key === "Tab" && !event.shiftKey && event.target === elements.canvas) {
+    } else if (plainKey && event.key === "Tab" && !event.shiftKey
+      && (event.target === elements.canvas || event.target === document.body)) {
       event.preventDefault();
+      focusBoard();
       if (!event.repeat && !state.world.running && tabHoldTimer === null) {
         tabHoldTimer = window.setTimeout(() => {
           start();
@@ -1151,6 +1161,7 @@
   }
 
   elements.run.addEventListener("click", toggleRun);
+  elements.run.addEventListener("click", focusBoardAfterClick);
   elements.exportDeleteAllRecords.addEventListener("click", Dialog.exportAndDeleteAllRecords);
   elements.importAllRecords.addEventListener("click", () => elements.importAllRecordsInput.click());
   elements.importAllRecordsInput.addEventListener("change", async () => {
@@ -1165,6 +1176,8 @@
     if (!elements.importAllRecordsDialog.open) Dialog.resetAllRecordsImport();
   });
   elements.step.addEventListener("click", advance);
+  elements.step.addEventListener("click", focusBoardAfterClick);
+  elements.pruneGliders.addEventListener("click", focusBoardAfterClick);
   elements.pruneGliders.addEventListener("change", () => {
     state.world.pruneGliders = elements.pruneGliders.checked;
     cycleTracker.reset();
