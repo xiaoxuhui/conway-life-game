@@ -355,7 +355,8 @@ body.is-running .button-primary {
   border-color: var(--danger);
 }
 
-.logic-safety-option {
+.logic-safety-option,
+.glider-cleanup-option {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -363,7 +364,8 @@ body.is-running .button-primary {
   font-size: 0.82rem;
 }
 
-.logic-safety-option input {
+.logic-safety-option input,
+.glider-cleanup-option input {
   margin: 0;
   accent-color: var(--accent);
 }
