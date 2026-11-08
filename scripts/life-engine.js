@@ -13,6 +13,10 @@
   const MAX_COORDINATE = Number.MAX_SAFE_INTEGER - 2;
   const DEFAULT_VIEW = Object.freeze({ centerRow: 0, centerColumn: 0, cellSize: 16 });
   const DEFAULT_RULE = "B3/S23";
+  const LIVE_CELL_BIT = 16;
+  const NEIGHBOR_MASK = 15;
+  const MAX_DENSE_AREA = 1_000_000;
+  const MAX_DENSE_AREA_PER_LIVE_CELL = 24;
   const ruleCache = new Map();
 
   function parseRule(input) {
@@ -125,26 +129,103 @@
   function nextCellSet(cells, rule = DEFAULT_RULE) {
     if (!(cells instanceof Set)) throw new TypeError("活细胞集合无效");
     const { birthMask, survivalMask } = parseRule(rule);
-    const neighborCounts = new Map();
+    if (!cells.size) return new Set();
 
+    const coordinates = [];
+    let minRow = Infinity;
+    let maxRow = -Infinity;
+    let minColumn = Infinity;
+    let maxColumn = -Infinity;
     for (const key of cells) {
       const [row, column] = parseKey(key);
-      if (!neighborCounts.has(key)) neighborCounts.set(key, 0);
-      for (let rowOffset = -1; rowOffset <= 1; rowOffset += 1) {
-        for (let columnOffset = -1; columnOffset <= 1; columnOffset += 1) {
-          if (rowOffset === 0 && columnOffset === 0) continue;
-          const neighborRow = row + rowOffset;
-          const neighborColumn = column + columnOffset;
-          if (Math.abs(neighborRow) > MAX_COORDINATE || Math.abs(neighborColumn) > MAX_COORDINATE) continue;
-          const neighborKey = coordinateKey(neighborRow, neighborColumn);
-          neighborCounts.set(neighborKey, (neighborCounts.get(neighborKey) || 0) + 1);
-        }
-      }
+      coordinates.push(row, column);
+      minRow = Math.min(minRow, row);
+      maxRow = Math.max(maxRow, row);
+      minColumn = Math.min(minColumn, column);
+      maxColumn = Math.max(maxColumn, column);
+    }
+    const width = maxColumn - minColumn + 3;
+    const height = maxRow - minRow + 3;
+    const area = width * height;
+    if (area <= MAX_DENSE_AREA && area <= cells.size * MAX_DENSE_AREA_PER_LIVE_CELL
+      && minRow > -MAX_COORDINATE && maxRow < MAX_COORDINATE
+      && minColumn > -MAX_COORDINATE && maxColumn < MAX_COORDINATE) {
+      return nextDenseCellSet(coordinates, minRow - 1, minColumn - 1, width, height, birthMask, survivalMask);
+    }
+    return nextSparseCellSet(coordinates, birthMask, survivalMask);
+  }
+
+  function nextDenseCellSet(coordinates, top, left, width, height, birthMask, survivalMask) {
+    // The one-cell margin keeps all eight neighbor indexes inside the array.
+    const counts = new Uint8Array(width * height);
+    for (let index = 0; index < coordinates.length; index += 2) {
+      const center = (coordinates[index] - top) * width + (coordinates[index + 1] - left);
+      counts[center - width - 1] += 1;
+      counts[center - width] += 1;
+      counts[center - width + 1] += 1;
+      counts[center - 1] += 1;
+      counts[center] |= LIVE_CELL_BIT;
+      counts[center + 1] += 1;
+      counts[center + width - 1] += 1;
+      counts[center + width] += 1;
+      counts[center + width + 1] += 1;
     }
 
     const next = new Set();
-    for (const [key, count] of neighborCounts) {
-      if ((cells.has(key) ? survivalMask : birthMask) & (1 << count)) next.add(key);
+    for (let row = 0; row < height; row += 1) {
+      const offset = row * width;
+      for (let column = 0; column < width; column += 1) {
+        const value = counts[offset + column];
+        const mask = value & LIVE_CELL_BIT ? survivalMask : birthMask;
+        if (mask & (1 << (value & NEIGHBOR_MASK))) next.add(coordinateKey(top + row, left + column));
+      }
+    }
+    return next;
+  }
+
+  function countNeighbor(row, column) {
+    row.set(column, (row.get(column) || 0) + 1);
+  }
+
+  function countSideNeighbors(row, column) {
+    if (column > -MAX_COORDINATE) countNeighbor(row, column - 1);
+    if (column < MAX_COORDINATE) countNeighbor(row, column + 1);
+  }
+
+  function nextSparseCellSet(coordinates, birthMask, survivalMask) {
+    const rows = new Map();
+    function getRow(row) {
+      let counts = rows.get(row);
+      if (!counts) {
+        counts = new Map();
+        rows.set(row, counts);
+      }
+      return counts;
+    }
+
+    for (let index = 0; index < coordinates.length; index += 2) {
+      const row = coordinates[index];
+      const column = coordinates[index + 1];
+      const current = getRow(row);
+      current.set(column, (current.get(column) || 0) | LIVE_CELL_BIT);
+      countSideNeighbors(current, column);
+      if (row > -MAX_COORDINATE) {
+        const above = getRow(row - 1);
+        countNeighbor(above, column);
+        countSideNeighbors(above, column);
+      }
+      if (row < MAX_COORDINATE) {
+        const below = getRow(row + 1);
+        countNeighbor(below, column);
+        countSideNeighbors(below, column);
+      }
+    }
+    const next = new Set();
+    for (const [row, counts] of rows) {
+      for (const [column, value] of counts) {
+        const mask = value & LIVE_CELL_BIT ? survivalMask : birthMask;
+        if (mask & (1 << (value & NEIGHBOR_MASK))) next.add(coordinateKey(row, column));
+      }
     }
     return next;
   }

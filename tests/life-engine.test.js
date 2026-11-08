@@ -70,6 +70,18 @@ test("远离原点的闪烁器周期为 2", () => {
   assert.deepEqual(coordinates(Life.nextGeneration(vertical)), coordinates(horizontal));
 });
 
+test("稀疏演化在安全整数坐标两端保留合法邻居，忽略越界出生", () => {
+  const limit = Life.MAX_COORDINATE;
+  const upper = [[-limit, -2], [-limit, -1], [-limit, 0]];
+  const right = [[4, limit], [5, limit], [6, limit]];
+  const world = Life.createWorld([...upper, ...right]);
+  assert.deepEqual(Life.aliveCoordinates(Life.nextGeneration(world)), [
+    [-limit, -1], [-limit + 1, -1], [5, limit - 1], [5, limit],
+  ]);
+  const isolated = Life.createWorld([[-limit, -limit], [limit, limit]]);
+  assert.deepEqual(Life.aliveCoordinates(Life.nextGeneration(isolated, "B/S0")), Life.aliveCoordinates(isolated));
+});
+
 test("滑翔机跨越原固定边界后仍向右下移动", () => {
   const preset = getPreset("glider");
   let world = Life.placePattern(Life.createWorld(), preset.cells, -41, 59);
