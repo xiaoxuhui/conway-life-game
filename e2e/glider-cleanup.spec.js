@@ -56,3 +56,37 @@ test("开启后每代检查，滑翔机飞出矩形才被清理", async ({ page 
   await expect(page.locator("#cyclePeriodValue")).toHaveText("1 代");
   await page.locator("#runToggle").click();
 });
+
+test("较大棋盘开启清理后仍在分块引擎中演化", async ({ page }) => {
+  await page.addInitScript(() => {
+    window.tiledCleanupCalls = 0;
+    Object.defineProperty(window, "LifeTiles", {
+      configurable: true,
+      set(tiles) {
+        Object.defineProperty(window, "LifeTiles", {
+          value: {
+            ...tiles,
+            pruneOutlyingGliders(world) {
+              const result = tiles.pruneOutlyingGliders(world);
+              if (result) window.tiledCleanupCalls += 1;
+              return result;
+            },
+          },
+        });
+      },
+    });
+  });
+  await page.goto("/");
+  const blocks = Array.from({ length: 8 }, (_, index) => index * 5)
+    .flatMap((column) => [[0, column], [0, column + 1], [1, column], [1, column + 1]]);
+  await importWorld(page, [...blocks, ...glider.map(([row, column]) => [row + 12, column + 12])]);
+  await page.getByRole("checkbox", { name: "清理离群滑翔机" }).check();
+  await expect(page.locator("#aliveValue")).toHaveText("32");
+  await page.locator("#runToggle").click();
+  await expect(page.locator("#cyclePeriodValue")).toHaveText("1 代");
+  expect(await page.evaluate(() => window.tiledCleanupCalls)).toBeGreaterThan(0);
+  await page.locator("#runToggle").click();
+  await page.locator("#lifeCanvas").click({ position: { x: 40, y: 40 } });
+  await expect(page.locator("#cyclePeriodValue")).toBeHidden();
+  await expect(page.locator("#aliveValue")).toHaveText("33");
+});

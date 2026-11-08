@@ -292,13 +292,13 @@
     return new Set(Object.values(keys));
   }
 
-  function gliderComponent(cells, seed) {
+  function gliderComponent(hasCell, seed) {
     const component = new Map([[seed, parseKey(seed)]]);
     for (const [row, column] of component.values()) {
       for (let y = row - 1; y <= row + 1; y += 1) {
         for (let x = column - 1; x <= column + 1; x += 1) {
           const key = coordinateKey(y, x);
-          if (!cells.has(key) || component.has(key)) continue;
+          if (!hasCell(key) || component.has(key)) continue;
           if (component.size === 5) return null;
           component.set(key, [y, x]);
         }
@@ -307,25 +307,35 @@
     return component.size === 5 && gliderMasks.has(gliderMask([...component.values()])) ? component : null;
   }
 
-  function pruneOutlyingGliders(world) {
-    assertWorld(world);
-    if (world.cells.size <= 5) return world;
+  function findOutlyingGliderKeys(hasCell, seeds, boundsWithout) {
     // A glider outside the remainder's bounds must own at least one whole outer edge.
-    const seeds = extremeCellKeys(world.cells);
-    let remaining = world;
+    const removed = [];
     for (const seed of seeds) {
-      const glider = gliderComponent(world.cells, seed);
+      const glider = gliderComponent(hasCell, seed);
       if (!glider) continue;
       for (const key of glider.keys()) seeds.delete(key);
-      const rectangle = cellBounds(world.cells, glider);
+      const rectangle = boundsWithout(glider);
+      if (!rectangle) continue;
       const hasCellInside = [...glider.values()].some(([row, column]) =>
         row >= rectangle.minRow && row <= rectangle.maxRow
         && column >= rectangle.minColumn && column <= rectangle.maxColumn,
       );
-      if (hasCellInside) continue;
-      if (remaining === world) remaining = cloneWorld(world);
-      for (const key of glider.keys()) remaining.cells.delete(key);
+      if (!hasCellInside) removed.push(...glider.keys());
     }
+    return removed;
+  }
+
+  function pruneOutlyingGliders(world) {
+    assertWorld(world);
+    if (world.cells.size <= 5) return world;
+    const removed = findOutlyingGliderKeys(
+      (key) => world.cells.has(key),
+      extremeCellKeys(world.cells),
+      (glider) => cellBounds(world.cells, glider),
+    );
+    if (!removed.length) return world;
+    const remaining = cloneWorld(world);
+    for (const key of removed) remaining.cells.delete(key);
     return remaining;
   }
 
@@ -603,6 +613,7 @@
     createCycleTracker,
     createWorld,
     deserialize,
+    findOutlyingGliderKeys,
     formatRule,
     isAlive,
     nextCellSet,

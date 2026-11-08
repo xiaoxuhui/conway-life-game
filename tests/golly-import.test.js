@@ -4,6 +4,8 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 const { gzipSync } = require("node:zlib");
 const Golly = require("../scripts/golly-import.js");
+const Life = require("../scripts/life-engine.js");
+const { rotatePattern, flipPattern } = require("../scripts/presets.js");
 
 const glider = [[0, 1], [1, 2], [2, 0], [2, 1], [2, 2]];
 const macrocell = "[M2] (golly 5.0)\n#R B3/S23\n#G 500\n$$..*$...*$.***$$$$\n4 0 1 0 0\n";
@@ -37,13 +39,37 @@ test("拒绝坏数据、空图案和项目规则不支持的状态", () => {
   assert.throws(() => Golly.parsePattern(macrocell.replace("4 0 1 0 0", "4 0 2 0 0")), /引用无效/);
 });
 
-test("导入上限拦截巨大的 RLE 活细胞行、Macrocell 共享节点扩张和 gzip 解压", async () => {
-  assert.throws(() => Golly.parsePattern("x=50001,y=1\n50001o!"), /5 万/);
-  const nodes = Array.from({ length: 8 }, (_, index) => {
+test("大型 RLE 和 Macrocell 以压缩结构读取，放置时才展开", async () => {
+  const rle = Golly.parsePattern("x=50001,y=1\n50001o!");
+  const original = Life.createWorld([[0, -1]]);
+  assert.equal(rle.cellCount, 50001n);
+  const placed = await Golly.placePattern(original, rle, 0, 0);
+  assert.equal(placed.cells.size, 50002);
+  assert.equal(original.cells.size, 1);
+  assert.equal(await Golly.placePattern(original, rle, 0, 0, () => false), null);
+  assert.equal(original.cells.size, 1);
+
+  const nodes = Array.from({ length: 22 }, (_, index) => {
     const child = index + 1;
     return [index + 4, child, child, child, child].join(" ");
   });
-  assert.throws(() => Golly.parsePattern(["[M2]", "*", ...nodes].join("\n")), /5 万/);
+  const tree = Golly.parsePattern(["[M2]", "*", ...nodes].join("\n"));
+  assert.equal(tree.cellCount, 4n ** 22n);
+  assert.deepEqual([...tree.cellsIn({ minRow: 0, maxRow: 1, minColumn: 0, maxColumn: 8 })], [[0, 0], [0, 8]]);
+  await assert.rejects(Golly.placePattern(original, tree, 0, 0), /最多可展开 200 万/);
+  assert.equal(original.cells.size, 1);
+});
+
+test("压缩预览的旋转、翻转与逐格变形一致", () => {
+  const source = Golly.parsePattern("x=5,y=4\n2bo$2o2bo$4bo!");
+  const full = { ...source };
+  const transformed = source.rotate().flip().rotate();
+  assert.deepEqual(transformed.cells, rotatePattern(flipPattern(rotatePattern(full))).cells);
+  const view = { minRow: 0, maxRow: 1, minColumn: 0, maxColumn: 3 };
+  assert.deepEqual([...transformed.cellsIn(view)], transformed.cells.filter(([row, column]) => row <= 1 && column <= 3));
+});
+
+test("gzip 解压仍限制文件字节数", async () => {
   const oversized = new File([gzipSync(Buffer.alloc(4_000_001, 32))], "oversized.rle.gz");
   await assert.rejects(Golly.readFile(oversized), /解压后的图案不能超过 4 MB/);
 });
