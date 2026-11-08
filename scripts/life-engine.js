@@ -351,7 +351,7 @@
     return `${cells.size}:${sum}:${xor}`;
   }
 
-  function createCycleTracker({ maxSnapshots = 256, maxTrackedCells = 160_000 } = {}) {
+  function createCycleTracker({ maxSnapshots = 256, maxTrackedCells = 160_000, describeWorld, sameWorld } = {}) {
     const recent = new Map();
     const snapshots = [];
     let trackedCells = 0;
@@ -361,6 +361,10 @@
     let period = null;
     let cycleStart = 0;
     let cycleFrames = null;
+
+    function worldsMatch(left, right) {
+      return sameWorld?.(left, right) ?? sameCells(left.cells, right.cells);
+    }
 
     function clearHistory() {
       recent.clear();
@@ -395,22 +399,25 @@
       lastGeneration = generation;
       if (period !== null) return period;
 
-      const { cells } = world;
-      const key = maxSnapshots > 0 && cells.size <= maxTrackedCells ? cellSignature(cells) : null;
+      const description = describeWorld?.(world);
+      const population = description?.population ?? world.cells.size;
+      const key = maxSnapshots > 0 && population <= maxTrackedCells
+        ? description?.signature ?? cellSignature(world.cells)
+        : null;
       if (key !== null) {
         const matches = recent.get(key) || [];
         for (let index = matches.length - 1; index >= 0; index -= 1) {
           const previous = matches[index];
-          if (sameCells(cells, previous.world.cells)) return confirm(generation, previous.generation);
+          if (worldsMatch(world, previous.world)) return confirm(generation, previous.generation);
         }
-        const snapshot = { world, generation, key };
+        const snapshot = { world, generation, key, population };
         matches.push(snapshot);
         recent.set(key, matches);
         snapshots.push(snapshot);
-        trackedCells += cells.size;
+        trackedCells += population;
         while (snapshots.length > maxSnapshots || trackedCells > maxTrackedCells) {
           const oldest = snapshots.shift();
-          trackedCells -= oldest.world.cells.size;
+          trackedCells -= oldest.population;
           const bucket = recent.get(oldest.key);
           bucket.shift();
           if (bucket.length === 0) recent.delete(oldest.key);
@@ -419,11 +426,11 @@
 
       // Brent's exponentially spaced checkpoints keep looking for longer
       // cycles after their first occurrence leaves the snapshot window.
-      if (!checkpoint) checkpoint = { cells, generation };
+      if (!checkpoint) checkpoint = { world, generation };
       else {
-        if (sameCells(cells, checkpoint.cells)) return confirm(generation, checkpoint.generation);
+        if (worldsMatch(world, checkpoint.world)) return confirm(generation, checkpoint.generation);
         if (generation - checkpoint.generation >= checkpointWindow) {
-          checkpoint = { cells, generation };
+          checkpoint = { world, generation };
           checkpointWindow *= 2;
         }
       }

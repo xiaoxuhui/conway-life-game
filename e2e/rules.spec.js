@@ -2,6 +2,8 @@
 
 const { test, expect } = require("@playwright/test");
 const fs = require("node:fs/promises");
+const Life = require("../scripts/life-engine.js");
+const { getPreset } = require("../scripts/presets.js");
 
 const block = [[0, 0], [0, 1], [1, 0], [1, 1]];
 const archive = (values = {}) => ({
@@ -127,6 +129,49 @@ test("确认循环后跳过计算，并在中间代读取逻辑输出", async ({
   await run.click();
   await page.locator("#stepButton").click();
   expect(await page.evaluate(() => window.evolutionCalls)).toBe(3);
+});
+
+test("未循环的分块棋盘暂停和导出时与逐代引擎一致", async ({ page }) => {
+  const blocks = Array.from({ length: 12 }, (_, index) => index * 5)
+    .flatMap((column) => [[0, column], [0, column + 1], [1, column], [1, column + 1]]);
+  const alive = [...blocks, ...getPreset("glider").cells.map(([row, column]) => [row + 21, column - 12])];
+  await page.addInitScript(() => {
+    window.tiledSteps = 0;
+    Object.defineProperty(window, "LifeTiles", {
+      configurable: true,
+      set(tiles) {
+        Object.defineProperty(window, "LifeTiles", {
+          value: {
+            ...tiles,
+            nextGeneration(world) {
+              const next = tiles.nextGeneration(world);
+              if (next) window.tiledSteps += 1;
+              return next;
+            },
+          },
+        });
+      },
+    });
+  });
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"));
+  await page.goto("/");
+  await importWorld(page, archive({ alive, generation: 0 }));
+  await expect(page.locator("#aliveValue")).toHaveText(String(alive.length));
+  await page.locator("#speedInput").fill("1000");
+  await page.locator("#jumpSizeInput").fill("7");
+  const run = page.locator("#runToggle");
+  await run.click();
+  await page.clock.runFor(100);
+  await run.click();
+  await expect(page.locator("#cyclePeriodValue")).toBeHidden();
+
+  const data = await exportedWorld(page);
+  expect(data.generation).toBeGreaterThan(50);
+  expect(await page.evaluate(() => window.tiledSteps)).toBe(data.generation);
+  let expected = Life.createWorld(alive);
+  for (let generation = 0; generation < data.generation; generation += 1) expected = Life.nextGeneration(expected);
+  expect(data.alive).toEqual(Life.aliveCoordinates(expected));
 });
 
 test("棋盘实际重现才显示循环节，编辑和换规则后重新检测", async ({ page }) => {
