@@ -146,7 +146,7 @@
             <input id="logicCodeInput" type="text" placeholder="例如：AND(A,B),A=1,B=0 / NOT 1" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="logicCodeHelp logicCodeFeedback">
             <button class="button" id="logicCodeButton" type="submit">生成结构</button>
           </div>
-          <p class="field-note" id="logicCodeHelp">支持 0/1、AND/OR/NOT、保存函数嵌套调用和末尾变量赋值；英文函数名称可直接调用。</p>
+          <p class="field-note" id="logicCodeHelp">支持 0/1、AND/OR/NOT、保存函数调用和末尾变量赋值，最多嵌套 32 层。</p>
           <div class="logic-library-row" aria-label="我的函数库">
             <select id="logicFunctionSelect" aria-label="我的函数" disabled>
               <option value="">我的函数（暂无）</option>

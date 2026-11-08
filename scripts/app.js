@@ -582,6 +582,17 @@
 
   function logicGenerationProgress(controller, progress) {
     if (state.dialogs.logicGenerationController !== controller || controller.signal.aborted) return;
+    if (progress.layoutMode === "axial-chain") {
+      const route = progress.routeStage === "reflected" ? "反射路线" : "直连路线";
+      const gates = `${formatNumber(progress.gateCount)} 个门`;
+      const generation = Number.isFinite(progress.generation)
+        ? `，第 ${formatNumber(progress.generation)} / ${formatNumber(progress.horizon)} 代`
+        : "";
+      const action = progress.phase === "routing" ? "正在同排布线"
+        : progress.phase === "rejected" ? "此路线未通过，正在换一条" : "正在验证同排线路";
+      setLogicCodeFeedback(`${action}（${gates}，${route}${generation}）…`, "progress");
+      return;
+    }
     if (progress.routeStage === "reflected") {
       const edge = progress.reflectedEdgePath
         ? `连接 ${progress.reflectedEdgePath}（${formatNumber((progress.edgeIndex || 0) + 1)} / ${formatNumber(progress.edgeCount || 1)}）`
@@ -650,8 +661,11 @@
       Dialog.updatePresetDescription();
       state.dialogs.placement = placementAtCameraCenter(pattern);
       const connected = Boolean(pattern.connectionCount);
+      const chainSummary = pattern.routing?.mode === "axial-chain"
+        ? `${pattern.gateAnchors.length} 个独立门体同排放置，`
+        : "";
       setLogicCodeFeedback(
-        `${command.expression} → 预期 O=${command.expected}；${connected ? `${pattern.connectionCount} 条滑翔机线路真实级联，` : ""}放置后运行至第 ${pattern.logic.observeGeneration} 代读取最终输出。`,
+        `${command.expression} → 预期 O=${command.expected}；${chainSummary}${connected ? `${pattern.connectionCount} 条滑翔机线路真实级联，` : ""}放置后运行至第 ${pattern.logic.observeGeneration} 代读取最终输出。`,
         "success",
       );
       render();
