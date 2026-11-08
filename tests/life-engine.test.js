@@ -38,11 +38,15 @@ test("循环节检查绝对坐标，按实际重复代数识别静物、闪烁�
 test("循环跟踪超出快照窗口后仍可确认周期，重置后丢弃旧记录", () => {
   const tracker = Life.createCycleTracker({ maxSnapshots: 2 });
   // One transient followed by a deterministic seven-state cycle.
+  let world;
   for (let generation = 0; generation <= 30; generation += 1) {
-    const world = Life.createWorld([[0, generation ? (generation - 1) % 7 : -1]]);
+    world = Life.createWorld([[0, generation ? (generation - 1) % 7 : -1]]);
     tracker.observe(world, generation);
   }
   assert.equal(tracker.period, 7);
+  assert.equal(tracker.fastForward(world, 30, 6), null);
+  assert.deepEqual(tracker.fastForward(world, 30, 20), { world, generations: 14 });
+  assert.equal(tracker.observe(world, 44), 7);
   tracker.reset();
   assert.equal(tracker.period, null);
   const afterEdit = Life.createWorld([[0, 1], [1, 0]]);
@@ -51,6 +55,24 @@ test("循环跟踪超出快照窗口后仍可确认周期，重置后丢弃旧�
   assert.equal(tracker.period, null);
   tracker.observe(Life.createWorld([[1, 0], [0, 1]]), 32);
   assert.equal(tracker.period, 1, "集合插入顺序不影响比较");
+});
+
+test("快进复用已确认的循环相位，重置后拒绝使用旧快照", () => {
+  const tracker = Life.createCycleTracker();
+  const horizontal = Life.createWorld([[0, -1], [0, 0], [0, 1]]);
+  const vertical = Life.nextGeneration(horizontal);
+  const repeated = Life.nextGeneration(vertical);
+  tracker.observe(horizontal, 7);
+  tracker.observe(vertical, 8);
+  assert.equal(tracker.fastForward(vertical, 8, 1001), null);
+  assert.equal(tracker.observe(repeated, 9), 2);
+
+  const oddAdvance = tracker.fastForward(repeated, 9, 1001);
+  assert.deepEqual(oddAdvance, { world: vertical, generations: 1001 });
+  assert.equal(tracker.observe(oddAdvance.world, 1010), 2);
+  assert.deepEqual(tracker.fastForward(vertical, 1010, 1000), { world: vertical, generations: 1000 });
+  tracker.reset();
+  assert.equal(tracker.fastForward(vertical, 2010, 1000), null);
 });
 
 test("空世界和单细胞按规则死亡", () => {
