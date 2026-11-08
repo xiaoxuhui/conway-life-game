@@ -3,28 +3,39 @@
 const { test, expect } = require("@playwright/test");
 const fs = require("node:fs/promises");
 
-test("深层同排门链可以取消，再生成和放置九个独立门体", async ({ page }) => {
+test("默认快速生成深层门链，也可开启验证并取消", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
   const input = page.locator("#logicCodeInput");
   const generate = page.locator("#logicCodeButton");
   const feedback = page.locator("#logicCodeFeedback");
+  const verifySafety = page.getByRole("checkbox", { name: /验证安全线路/ });
   const chain = (depth) => "NOT(".repeat(depth) + "0" + ")".repeat(depth);
+  await expect(verifySafety).not.toBeChecked();
   await input.fill(chain(32));
   await generate.click();
-  await expect(feedback).toContainText("32 个门");
+  await expect(feedback).toContainText("32 个独立门体同排放置，31 条滑翔机线路，线路未经安全验证");
+  await expect(page.locator("#statusText")).toHaveText("放置中");
+  await page.locator("#lifeCanvas").click({ position: { x: 120, y: 120 } });
+  await expect(page.locator("#aliveValue")).not.toHaveText("0");
+  const aliveBefore = await page.locator("#aliveValue").textContent();
+
+  await verifySafety.check();
+  await generate.click();
+  await expect(feedback).toContainText("正在验证同排线路");
   await expect(generate).toHaveText("取消生成");
   await generate.click();
   await expect(feedback).toContainText("当前世界没有改变");
-  await expect(page.locator("#aliveValue")).toHaveText("0");
+  await expect(page.locator("#aliveValue")).toHaveText(aliveBefore);
   await expect(page.locator("#generationValue")).toHaveText("0");
 
   await input.fill(chain(9));
   await generate.click();
-  await expect(feedback).toContainText("9 个独立门体同排放置，8 条滑翔机线路真实级联", {
+  await expect(feedback).toContainText("9 个独立门体同排放置，8 条滑翔机线路", {
     timeout: 20_000,
   });
+  await expect(feedback).not.toContainText("线路未经安全验证");
   await expect(feedback).toContainText("预期 O=1");
   await expect(input).toHaveValue(chain(9));
   await expect(page.locator("#statusText")).toHaveText("放置中");

@@ -351,6 +351,19 @@ body.is-running .button-primary {
   border-color: var(--danger);
 }
 
+.logic-safety-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  font-size: 0.82rem;
+}
+
+.logic-safety-option input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .logic-code-feedback {
   overflow: visible;
   min-height: 1.2em;

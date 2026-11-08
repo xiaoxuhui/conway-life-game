@@ -147,6 +147,10 @@
             <button class="button" id="logicCodeButton" type="submit">生成结构</button>
           </div>
           <p class="field-note" id="logicCodeHelp">支持 0/1、AND/OR/NOT、保存函数调用和末尾变量赋值，最多嵌套 32 层。</p>
+          <label class="logic-safety-option">
+            <input id="verifyLogicSafety" type="checkbox">
+            <span>验证安全线路（较慢）</span>
+          </label>
           <div class="logic-library-row" aria-label="我的函数库">
             <select id="logicFunctionSelect" aria-label="我的函数" disabled>
               <option value="">我的函数（暂无）</option>

@@ -53,6 +53,7 @@
     logicCodeFeedback: document.querySelector("#logicCodeFeedback"),
     logicCodeForm: document.querySelector("#logicCodeForm"),
     logicCodeInput: document.querySelector("#logicCodeInput"),
+    verifyLogicSafety: document.querySelector("#verifyLogicSafety"),
     logicFunctionSelect: document.querySelector("#logicFunctionSelect"),
     logicFunctionInputs: document.querySelector("#logicFunctionInputs"),
     loadLogicFunction: document.querySelector("#loadLogicFunctionButton"),
@@ -528,6 +529,7 @@
   function setLogicGenerationState(running) {
     elements.logicCodeForm.setAttribute("aria-busy", String(running));
     elements.logicCodeButton.textContent = running ? "取消生成" : "生成结构";
+    elements.verifyLogicSafety.disabled = running;
     elements.logicCodeButton.disabled = !running && state.world.rule !== Life.DEFAULT_RULE;
   }
 
@@ -650,6 +652,7 @@
         command, Presets.getPreset, Presets.getLogicGateKit, Presets.getLogicReflectorKit,
         {
           signal: controller.signal,
+          verifySafety: elements.verifyLogicSafety.checked,
           onProgress: (progress) => logicGenerationProgress(controller, progress),
         },
       );
@@ -664,8 +667,10 @@
       const chainSummary = pattern.routing?.mode === "axial-chain"
         ? `${pattern.gateAnchors.length} 个独立门体同排放置，`
         : "";
+      const connectionSummary = connected ? `${pattern.connectionCount} 条滑翔机线路，` : "";
+      const verificationNote = connected && !pattern.gunSafety ? "线路未经安全验证，" : "";
       setLogicCodeFeedback(
-        `${command.expression} → 预期 O=${command.expected}；${chainSummary}${connected ? `${pattern.connectionCount} 条滑翔机线路真实级联，` : ""}放置后运行至第 ${pattern.logic.observeGeneration} 代读取最终输出。`,
+        `${command.expression} → 预期 O=${command.expected}。${chainSummary}${connectionSummary}${verificationNote}放置后运行至第 ${pattern.logic.observeGeneration} 代读取最终输出。`,
         "success",
       );
       render();

@@ -167,6 +167,7 @@ test("自定义规则禁止生成及输出锁存，恢复默认可重新生成",
 test("切换规则取消正在验证的电路，不能异步留下旧规则的预览", async ({ page }) => {
   await page.goto("/");
   await page.locator("#logicCodeInput").fill("NOT(AND(1,1))");
+  await page.getByRole("checkbox", { name: /验证安全线路/ }).check();
   await page.locator("#logicCodeButton").click();
   await expect(page.locator("#logicCodeButton")).toHaveText("取消生成");
   await applyRule(page, "B23/S3");
