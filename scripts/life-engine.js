@@ -154,6 +154,102 @@
     return { cells: nextCellSet(world.cells, rule) };
   }
 
+  function sameCells(left, right) {
+    if (left.size !== right.size) return false;
+    for (const key of left) {
+      if (!right.has(key)) return false;
+    }
+    return true;
+  }
+
+  function cellSignature(cells) {
+    let sum = 0;
+    let xor = 0;
+    for (const key of cells) {
+      let hash = 2166136261;
+      for (let index = 0; index < key.length; index += 1) {
+        hash = Math.imul(hash ^ key.charCodeAt(index), 16777619);
+      }
+      sum = (sum + hash) | 0;
+      xor ^= hash;
+    }
+    return `${cells.size}:${sum}:${xor}`;
+  }
+
+  function createCycleTracker({ maxSnapshots = 256, maxTrackedCells = 160_000 } = {}) {
+    const recent = new Map();
+    const snapshots = [];
+    let trackedCells = 0;
+    let checkpoint = null;
+    let checkpointWindow = 1;
+    let lastGeneration = null;
+    let period = null;
+
+    function clearHistory() {
+      recent.clear();
+      snapshots.length = 0;
+      trackedCells = 0;
+      checkpoint = null;
+    }
+
+    function reset() {
+      clearHistory();
+      checkpointWindow = 1;
+      lastGeneration = null;
+      period = null;
+    }
+
+    function confirm(generation, previousGeneration) {
+      period = generation - previousGeneration;
+      clearHistory();
+      return period;
+    }
+
+    // Evolution returns a fresh cell set. Call reset before editing a
+    // recorded world in place or starting a new evolution timeline.
+    function observe({ cells }, generation) {
+      if (lastGeneration === generation) return period;
+      if (lastGeneration !== null && generation !== lastGeneration + 1) reset();
+      lastGeneration = generation;
+      if (period !== null) return period;
+
+      const key = maxSnapshots > 0 && cells.size <= maxTrackedCells ? cellSignature(cells) : null;
+      if (key !== null) {
+        const matches = recent.get(key) || [];
+        for (let index = matches.length - 1; index >= 0; index -= 1) {
+          const previous = matches[index];
+          if (sameCells(cells, previous.cells)) return confirm(generation, previous.generation);
+        }
+        const snapshot = { cells, generation, key };
+        matches.push(snapshot);
+        recent.set(key, matches);
+        snapshots.push(snapshot);
+        trackedCells += cells.size;
+        while (snapshots.length > maxSnapshots || trackedCells > maxTrackedCells) {
+          const oldest = snapshots.shift();
+          trackedCells -= oldest.cells.size;
+          const bucket = recent.get(oldest.key);
+          bucket.shift();
+          if (bucket.length === 0) recent.delete(oldest.key);
+        }
+      }
+
+      // Brent's exponentially spaced checkpoints keep looking for longer
+      // cycles after their first occurrence leaves the snapshot window.
+      if (!checkpoint) checkpoint = { cells, generation };
+      else {
+        if (sameCells(cells, checkpoint.cells)) return confirm(generation, checkpoint.generation);
+        if (generation - checkpoint.generation >= checkpointWindow) {
+          checkpoint = { cells, generation };
+          checkpointWindow *= 2;
+        }
+      }
+      return period;
+    }
+
+    return Object.freeze({ observe, reset, get period() { return period; } });
+  }
+
   function randomWorld(rows = 40, columns = 60, density = 0.25, random = Math.random, centerRow = 0, centerColumn = 0) {
     assertInteger(rows, "随机区域行数", 1, MAX_LEGACY_DIMENSION);
     assertInteger(columns, "随机区域列数", 1, MAX_LEGACY_DIMENSION);
@@ -296,6 +392,7 @@
     cloneWorld,
     coordinateKey,
     countAlive,
+    createCycleTracker,
     createWorld,
     deserialize,
     formatRule,
