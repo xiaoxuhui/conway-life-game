@@ -3,6 +3,7 @@
 
   const Life = window.LifeEngine;
   const Tiles = window.LifeTiles;
+  const LifeStack = window.LifeStack;
   const RendererModule = window.LifeRenderer;
   const Presets = window.LifePresets;
   const PatternStore = window.PatternLibrary;
@@ -1231,6 +1232,7 @@
   }
 
   function handleKeyDown(event) {
+    if (stackDialog.open) return;
     if (manualJump && event.key === "Escape" && !document.activeElement?.closest("dialog")) {
       event.preventDefault();
       stop();
@@ -1434,6 +1436,24 @@
     elements.importInput.value = "";
   });
   elements.importGollyButton.addEventListener("click", () => elements.importGollyInput.click());
+  const stackDialog = document.querySelector("#lifeStackDialog");
+  const stackView = LifeStack.createDialog({
+    dialog: stackDialog,
+    form: document.querySelector("#lifeStackForm"),
+    closeButton: document.querySelector("#closeLifeStackButton"),
+    canvas: document.querySelector("#lifeStackCanvas"),
+    status: document.querySelector("#lifeStackStatus"),
+    steps: document.querySelector("#lifeStackSteps"),
+    rotation: document.querySelector("#lifeStackRotation"),
+    elevation: document.querySelector("#lifeStackElevation"),
+  });
+  document.querySelector("#lifeStackButton").addEventListener("click", () => {
+    stop();
+    state.pointer.spaceDown = false;
+    updateCursorClasses();
+    const { cells, generation, rule, pruneGliders } = state.world;
+    stackView.open({ world: cells, generation, rule, pruneGliders });
+  });
   elements.importGollyInput.addEventListener("change", () => {
     const file = elements.importGollyInput.files?.[0];
     elements.importGollyInput.value = "";
