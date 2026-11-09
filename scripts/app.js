@@ -148,6 +148,7 @@
 
   const renderer = RendererModule.create(elements.canvas);
   const cycleTracker = Life.createCycleTracker({ describeWorld: Tiles.describeWorld, sameWorld: Tiles.sameWorld });
+  let displayedFrame;
   let tabHoldTimer = null;
   let runningFromTab = false;
   let pendingPlacement = null;
@@ -290,6 +291,7 @@
   }
 
   function render(cells = state.world.cells, generation = state.world.generation) {
+    displayedFrame = { cells, generation };
     const rule = Life.parseRule(state.world.rule);
     elements.pruneGliders.disabled = rule.canonical !== Life.DEFAULT_RULE;
     elements.pruneGliders.checked = state.world.pruneGliders;
@@ -340,6 +342,15 @@
     document.body.classList.toggle("is-running", state.world.running);
     document.body.classList.toggle("is-placing", Boolean(state.dialogs.placement));
     updateCursorClasses();
+  }
+
+  function viewFrame() {
+    return state.world.running ? displayedFrame : state.world;
+  }
+
+  function redrawView() {
+    const { cells, generation } = viewFrame();
+    render(cells, generation);
   }
 
   function hideToast() {
@@ -506,8 +517,8 @@
   }
 
   function fitView() {
-    state.world.camera = renderer.fit(Life.bounds(state.world.cells));
-    render();
+    state.world.camera = renderer.fit(Life.bounds(viewFrame().cells));
+    redrawView();
   }
 
   function resetWith(world, message, shouldFit = true) {
@@ -1093,7 +1104,7 @@
       currentMidpoint.x - gesture.startMidpoint.x,
       currentMidpoint.y - gesture.startMidpoint.y,
     );
-    render();
+    redrawView();
   }
 
   function handlePointerMove(event) {
@@ -1117,7 +1128,7 @@
       state.world.camera = RendererModule.panCamera(state.world.camera, deltaX, deltaY);
       state.pointer.panGesture.lastX = point.x;
       state.pointer.panGesture.lastY = point.y;
-      render();
+      redrawView();
       return;
     }
 
@@ -1153,14 +1164,14 @@
       viewport,
       factor,
     );
-    render();
+    redrawView();
   }
 
   function handleWheel(event) {
     event.preventDefault();
     const factor = Math.exp(-event.deltaY * 0.0015);
     state.world.camera = renderer.zoomAtPointer(event, state.world.camera, factor);
-    render();
+    redrawView();
   }
 
   function ignoresGlobalShortcut() {
