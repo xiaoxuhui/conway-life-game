@@ -424,5 +424,7 @@
     return worldData.has(world) ? { cells: new Set(world.cells) } : world;
   }
 
-  return Object.freeze({ prepare, nextGeneration, describeWorld, sameWorld, editableWorld, pruneOutlyingGliders });
+  return Object.freeze({
+    TILE_SIZE: SIZE, prepare, nextGeneration, describeWorld, sameWorld, editableWorld, pruneOutlyingGliders,
+  });
 });
