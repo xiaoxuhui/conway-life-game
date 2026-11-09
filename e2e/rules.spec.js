@@ -53,9 +53,20 @@ test("跳步只按完整间隔显示，循环节及时出现且暂停后可单�
   await page.clock.runFor(270);
   await expect(period).toHaveText("2 代");
   await expect(generation).toHaveText("7");
+  const canvas = page.locator("#lifeCanvas");
+  const zoom = page.locator("#zoomValue");
+  const beforeWheel = await zoom.textContent();
+  await canvas.hover();
+  await page.mouse.wheel(0, -120);
+  await expect(zoom).not.toHaveText(beforeWheel);
+  await expect(generation).toHaveText("7");
+  await expect(canvas).toHaveAttribute("aria-label", /第 7 代/);
+  await expect(jumpSize).toHaveValue("4");
   await page.clock.runFor(180);
   await expect(generation).toHaveText("11");
   await page.clock.runFor(100);
+  await expect(generation).toHaveText("11");
+  await page.locator("#zoomInButton").click();
   await expect(generation).toHaveText("11");
 
   await run.click();
