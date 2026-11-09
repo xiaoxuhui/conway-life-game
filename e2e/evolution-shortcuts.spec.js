@@ -66,6 +66,42 @@ test("轻按 Tab 在棋盘内单步，T 开始或暂停", async ({ page }) => {
   await expect(status).toHaveText("已暂停");
 });
 
+test("F3 加 Tab 按跳步值推进一次，普通 Tab 仍单步", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T00:00:01Z"));
+  await page.goto("/");
+  const generation = page.locator("#generationValue");
+  const status = page.locator("#statusText");
+  const canvas = page.locator("#lifeCanvas");
+  await page.locator("#jumpSizeInput").fill("12");
+  await canvas.focus();
+
+  await page.keyboard.down("F3");
+  await page.keyboard.down("Tab");
+  await page.keyboard.down("Tab");
+  await page.keyboard.up("Tab");
+  await page.keyboard.up("F3");
+  await expect(status).toHaveText("跳步中");
+  await expect(generation).toHaveText("0");
+  await page.clock.runFor(40);
+  await expect(generation).toHaveText("12");
+  await expect(status).toHaveText("已暂停");
+
+  await page.keyboard.press("Tab");
+  await expect(generation).toHaveText("13");
+  await page.keyboard.press("Shift+ArrowRight");
+  await page.clock.runFor(40);
+  await expect(generation).toHaveText("25");
+
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect(status).toHaveText("跳步中");
+  await page.locator("#jumpSizeInput").focus();
+  await page.keyboard.press("Escape");
+  await page.clock.runFor(40);
+  await expect(generation).toHaveText("25");
+  await expect(status).toHaveText("已暂停");
+});
+
 test("长按 Tab 连续演化，松键或画布失焦时暂停", async ({ page }) => {
   await page.goto("/");
   const canvas = page.locator("#lifeCanvas");

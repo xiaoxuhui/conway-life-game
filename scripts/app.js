@@ -149,6 +149,8 @@
   const renderer = RendererModule.create(elements.canvas);
   const cycleTracker = Life.createCycleTracker({ describeWorld: Tiles.describeWorld, sameWorld: Tiles.sameWorld });
   let displayedFrame;
+  let manualJump = null;
+  let f3Down = false;
   let tabHoldTimer = null;
   let runningFromTab = false;
   let pendingPlacement = null;
@@ -293,7 +295,7 @@
   function render(cells = state.world.cells, generation = state.world.generation) {
     displayedFrame = { cells, generation };
     const rule = Life.parseRule(state.world.rule);
-    elements.pruneGliders.disabled = rule.canonical !== Life.DEFAULT_RULE;
+    elements.pruneGliders.disabled = Boolean(manualJump) || rule.canonical !== Life.DEFAULT_RULE;
     elements.pruneGliders.checked = state.world.pruneGliders;
     elements.activeRule.textContent = Life.formatRule(state.world.rule, elements.ruleNotation.value);
     elements.ruleBirth.textContent = [...rule.birth].join("、") || "无";
@@ -309,11 +311,12 @@
     elements.alive.textContent = formatNumber(alive);
     renderEvolutionReadouts();
     elements.zoomValue.textContent = formatZoom(state.world.camera.cellSize);
-    elements.status.textContent = state.dialogs.placement ? "放置中" : state.world.running ? "演化中" : "已暂停";
+    elements.status.textContent = state.dialogs.placement ? "放置中" : manualJump ? "跳步中" : state.world.running ? "演化中" : "已暂停";
     elements.run.querySelector(".button-icon").textContent = state.world.running ? "Ⅱ" : "▶";
     elements.run.querySelector(".button-label").textContent = state.world.running ? "暂停" : "开始";
     elements.run.setAttribute("aria-pressed", String(state.world.running));
-    elements.step.disabled = state.world.running;
+    elements.run.disabled = Boolean(manualJump);
+    elements.step.disabled = state.world.running || Boolean(manualJump);
     elements.clear.disabled = alive === 0;
     elements.export.disabled = alive === 0;
     elements.savePattern.disabled = alive === 0;
@@ -329,15 +332,17 @@
     elements.flipPattern.disabled = !state.dialogs.placement;
     elements.canvas.setAttribute(
       "aria-label",
-      `无限大的康威生命游戏世界；规则 ${state.world.rule}；视图中心列 ${formatCoordinate(state.world.camera.centerColumn)}、行 ${formatCoordinate(state.world.camera.centerRow)}；第 ${generation} 代，${alive} 个活细胞，${state.dialogs.placement ? `正在放置${state.dialogs.placement.pattern.name}` : state.world.running ? "正在运行" : "已暂停"}${logicSummary ? `；逻辑输出：${logicSummary}` : ""}。`,
+      `无限大的康威生命游戏世界；规则 ${state.world.rule}；视图中心列 ${formatCoordinate(state.world.camera.centerColumn)}、行 ${formatCoordinate(state.world.camera.centerRow)}；第 ${generation} 代，${alive} 个活细胞，${state.dialogs.placement ? `正在放置${state.dialogs.placement.pattern.name}` : manualJump ? "正在跳步" : state.world.running ? "正在运行" : "已暂停"}${logicSummary ? `；逻辑输出：${logicSummary}` : ""}。`,
     );
     elements.boardHint.textContent = state.dialogs.placement
       ? "拖动预览，松开或单击放置；R 旋转 · F 翻转 · Esc 完成。"
-      : logicSummary
-        ? `方框中的 2×2 方块是静物输出端；${logicSummary}。`
-      : state.world.running
-        ? "正在演化；仍可拖动和缩放，暂停后可继续绘制。"
-        : "左键绘制；中键、右键或按住空格拖动；滚轮缩放。";
+      : manualJump
+        ? "正在跳步，按 Esc 停止。"
+        : logicSummary
+          ? `方框中的 2×2 方块是静物输出端；${logicSummary}。`
+          : state.world.running
+            ? "正在演化；仍可拖动和缩放，暂停后可继续绘制。"
+            : "左键绘制；中键、右键或按住空格拖动；滚轮缩放。";
     elements.worldPosition.textContent = `WORLD ∞ · CENTER ${formatCoordinate(state.world.camera.centerColumn)}, ${formatCoordinate(state.world.camera.centerRow)}`;
     document.body.classList.toggle("is-running", state.world.running);
     document.body.classList.toggle("is-placing", Boolean(state.dialogs.placement));
@@ -345,7 +350,7 @@
   }
 
   function viewFrame() {
-    return state.world.running ? displayedFrame : state.world;
+    return state.world.running || manualJump ? displayedFrame : state.world;
   }
 
   function redrawView() {
@@ -368,10 +373,10 @@
     state.dialogs.toastTimer = window.setTimeout(hideToast, options.duration || 3600);
   }
 
-  function evolveOneGeneration() {
+  function evolveOneGeneration(useTiles = state.world.running) {
     if (state.dialogs.placement) state.dialogs.placement = null;
     cycleTracker.observe(state.world.cells, state.world.generation);
-    const tiled = state.world.running && state.world.rule === Life.DEFAULT_RULE
+    const tiled = useTiles && state.world.rule === Life.DEFAULT_RULE
       ? Tiles.nextGeneration(state.world.cells)
       : null;
     state.world.cells = tiled ?? Life.nextGeneration(state.world.cells, state.world.rule);
@@ -384,15 +389,14 @@
   }
 
   function advance() {
+    if (manualJump) return;
     evolveOneGeneration();
     render();
   }
 
-  function advanceFrameGenerations() {
+  function advanceGenerations(limit, useTiles) {
     if (cycleTracker.period !== null) {
-      const { cells, generation, frameAccumulator, jumpSize, jumpProgress, logicOutputs } = state.world;
-      let limit = Math.floor(frameAccumulator);
-      if (jumpSize > 1) limit = Math.min(limit, jumpSize - jumpProgress);
+      const { cells, generation, logicOutputs } = state.world;
       for (const output of logicOutputs) {
         if (output.result === null) limit = Math.min(limit, Math.max(1, output.observeGeneration - generation));
       }
@@ -404,8 +408,52 @@
         return forwarded.generations;
       }
     }
-    evolveOneGeneration();
+    evolveOneGeneration(useTiles);
     return 1;
+  }
+
+  function advanceFrameGenerations() {
+    const { frameAccumulator, jumpSize, jumpProgress } = state.world;
+    const toDisplay = jumpSize === 1 ? Infinity : jumpSize - jumpProgress;
+    return advanceGenerations(Math.min(Math.floor(frameAccumulator), toDisplay));
+  }
+
+  function runManualJumpFrame(job) {
+    if (manualJump !== job) return;
+    const previousPeriod = cycleTracker.period;
+    const computeStarted = performance.now();
+    try {
+      do {
+        job.remaining -= advanceGenerations(job.remaining, true);
+      } while (job.remaining > 0 && performance.now() - computeStarted < SpeedControl.FRAME_COMPUTE_BUDGET_MS);
+    } catch (error) {
+      stop();
+      showToast(error.message);
+      return;
+    }
+    if (job.remaining > 0) {
+      if (cycleTracker.period !== previousPeriod) renderEvolutionReadouts();
+      job.frame = window.requestAnimationFrame(() => runManualJumpFrame(job));
+    } else {
+      manualJump = null;
+      render();
+    }
+  }
+
+  function jumpOnce() {
+    if (state.world.running || manualJump || pendingPlacement) return;
+    clearTabHold();
+    if (state.world.jumpSize === 1) {
+      advance();
+      return;
+    }
+    endDrawing();
+    state.dialogs.placement = null;
+    if (state.world.rule === Life.DEFAULT_RULE) state.world.cells = Tiles.prepare(state.world.cells);
+    const job = { remaining: state.world.jumpSize, frame: null };
+    manualJump = job;
+    render();
+    job.frame = window.requestAnimationFrame(() => runManualJumpFrame(job));
   }
 
   function runAnimationFrame(timestamp) {
@@ -467,6 +515,10 @@
 
   function stop(options = {}) {
     clearTabHold();
+    if (manualJump) {
+      window.cancelAnimationFrame(manualJump.frame);
+      manualJump = null;
+    }
     if (state.world.animationFrame !== null) {
       window.cancelAnimationFrame(state.world.animationFrame);
       state.world.animationFrame = null;
@@ -483,7 +535,7 @@
   }
 
   function start() {
-    if (state.world.running) return;
+    if (state.world.running || manualJump) return;
     clearTabHold();
     endDrawing();
     state.dialogs.placement = null;
@@ -981,7 +1033,7 @@
   }
 
   function beginDrawing(event) {
-    if (state.world.running) {
+    if (state.world.running || manualJump) {
       showToast("请先暂停，再绘制细胞");
       return;
     }
@@ -1071,7 +1123,7 @@
     if (event.pointerType === "touch") {
       if (state.pointer.activePointers.size >= 2) beginTouchGesture();
       else if (state.dialogs.placement) beginPlacementDrag(event);
-      else if (state.world.running) beginPan(event);
+      else if (state.world.running || manualJump) beginPan(event);
       else beginDrawing(event);
       return;
     }
@@ -1179,10 +1231,27 @@
   }
 
   function handleKeyDown(event) {
+    if (manualJump && event.key === "Escape" && !document.activeElement?.closest("dialog")) {
+      event.preventDefault();
+      stop();
+      return;
+    }
     if (ignoresGlobalShortcut()) return;
     if (document.activeElement?.tagName === "BUTTON" && event.code === "Space") return;
     const plainKey = !event.ctrlKey && !event.altKey && !event.metaKey && !event.isComposing;
-    if (state.dialogs.placement && event.key === "Escape") {
+    const boardFocus = event.target === elements.canvas || event.target === document.body;
+    const canJump = plainKey && boardFocus && !state.world.running;
+    if (canJump && event.key === "F3" && !event.shiftKey) {
+      event.preventDefault();
+      f3Down = true;
+    } else if (canJump && ((f3Down && event.key === "Tab" && !event.shiftKey)
+      || (event.shiftKey && event.code === "ArrowRight"))) {
+      event.preventDefault();
+      if (!event.repeat) {
+        focusBoard();
+        jumpOnce();
+      }
+    } else if (state.dialogs.placement && event.key === "Escape") {
       event.preventDefault();
       finishPlacement();
     } else if (state.dialogs.placement && event.key.toLowerCase() === "r") {
@@ -1194,11 +1263,10 @@
     } else if (plainKey && event.key.toLowerCase() === "t" && !document.activeElement?.closest("dialog")) {
       event.preventDefault();
       if (!event.repeat) toggleRun();
-    } else if (plainKey && event.key === "Tab" && !event.shiftKey
-      && (event.target === elements.canvas || event.target === document.body)) {
+    } else if (plainKey && event.key === "Tab" && !event.shiftKey && boardFocus) {
       event.preventDefault();
       focusBoard();
-      if (!event.repeat && !state.world.running && tabHoldTimer === null) {
+      if (!event.repeat && !state.world.running && !manualJump && tabHoldTimer === null) {
         tabHoldTimer = window.setTimeout(() => {
           start();
           runningFromTab = true;
@@ -1223,6 +1291,7 @@
   }
 
   function handleKeyUp(event) {
+    if (event.key === "F3") f3Down = false;
     if (event.key === "Tab" && (tabHoldTimer !== null || runningFromTab)) {
       event.preventDefault();
       endTabHold(true);
@@ -1397,7 +1466,10 @@
 
   elements.jumpSize.addEventListener("change", applyJumpSize);
   elements.jumpSize.addEventListener("blur", applyJumpSize);
-  elements.canvas.addEventListener("blur", () => endTabHold());
+  elements.canvas.addEventListener("blur", () => {
+    f3Down = false;
+    endTabHold();
+  });
   elements.canvas.addEventListener("pointerdown", handlePointerDown);
   elements.canvas.addEventListener("pointermove", handlePointerMove);
   elements.canvas.addEventListener("pointerup", (event) => releasePointer(event));
@@ -1407,6 +1479,7 @@
   document.addEventListener("keydown", handleKeyDown);
   document.addEventListener("keyup", handleKeyUp);
   window.addEventListener("blur", () => {
+    f3Down = false;
     endTabHold();
     state.pointer.spaceDown = false;
     state.pointer.spaceDragged = false;
@@ -1414,7 +1487,7 @@
   });
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) return;
-    if (state.world.running) stop({ message: "页面隐藏，已自动暂停" });
+    if (state.world.running || manualJump) stop({ message: "页面隐藏，已自动暂停" });
     else endTabHold();
   });
 
