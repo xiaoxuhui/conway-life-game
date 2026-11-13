@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles/main.css?v=0.17.0">
   <script defer src="scripts/life-engine.js?v=0.17.0"></script>
   <script defer src="scripts/life-tiles.js?v=0.17.0"></script>
+  <script defer src="scripts/life-stack-renderer.js?v=0.17.0"></script>
   <script defer src="scripts/life-stack.js?v=0.17.0"></script>
   <script defer src="scripts/presets.js?v=0.17.0"></script>
   <script defer src="scripts/pattern-library.js?v=0.17.0"></script>
@@ -291,7 +292,7 @@
       <div class="dialog-header">
         <div>
           <h2 id="lifeStackTitle">三维演化</h2>
-          <p class="life-stack-hint" id="lifeStackHint">当前代在底部，时间逐层向上。拖动图形或使用滑杆旋转。</p>
+          <p class="life-stack-hint" id="lifeStackHint">当前代在底部。拖动或用滑杆旋转视角。点击画布后，W 前进、A 左移、S 后退、D 右移、空格上升、F 下降。</p>
         </div>
         <button class="dialog-close" id="closeLifeStackButton" type="button" aria-label="关闭">×</button>
       </div>
@@ -301,9 +302,11 @@
           <input id="lifeStackSteps" type="number" min="1" max="32" value="12" required>
         </label>
         <button class="button button-primary" type="submit">生成</button>
+        <button class="button" id="resetLifeStackViewButton" type="button">重置视角</button>
       </div>
       <p id="lifeStackStatus" class="life-stack-hint" role="status"></p>
-      <canvas id="lifeStackCanvas" role="img" aria-label="逐代堆叠的三维演化图" aria-describedby="lifeStackHint lifeStackStatus"></canvas>
+      <canvas id="lifeStackCanvas" tabindex="0" role="img" aria-label="逐代堆叠的三维演化图"
+        aria-keyshortcuts="W A S D Space F" aria-describedby="lifeStackHint lifeStackStatus"></canvas>
       <div class="life-stack-controls life-stack-angles">
         <label class="dialog-field">
           <span>水平旋转</span>
@@ -311,7 +314,7 @@
         </label>
         <label class="dialog-field">
           <span>俯视角度</span>
-          <input id="lifeStackElevation" type="range" min="12" max="70" value="28">
+          <input id="lifeStackElevation" type="range" min="-80" max="80" value="28">
         </label>
       </div>
     </form>
