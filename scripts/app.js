@@ -1441,6 +1441,7 @@
     dialog: stackDialog,
     form: document.querySelector("#lifeStackForm"),
     closeButton: document.querySelector("#closeLifeStackButton"),
+    resetViewButton: document.querySelector("#resetLifeStackViewButton"),
     canvas: document.querySelector("#lifeStackCanvas"),
     status: document.querySelector("#lifeStackStatus"),
     steps: document.querySelector("#lifeStackSteps"),
