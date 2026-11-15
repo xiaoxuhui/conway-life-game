@@ -3,6 +3,20 @@
 const { test, expect } = require("@playwright/test");
 const fs = require("node:fs/promises");
 
+test("逻辑代码默认用一座输入枪驱动 A 的两个端口", async ({ page }) => {
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await expect(page.getByRole("checkbox", { name: "同名变量共用一座输入枪" })).toBeChecked();
+  await page.locator("#logicCodeInput").fill("AND(A,A),A=1");
+  await page.locator("#logicCodeButton").click();
+  await expect(page.locator("#logicCodeFeedback")).toContainText("1 座变量输入枪。A 的输入枪连接 2 个端口");
+  await expect(page.locator("#statusText")).toHaveText("放置中");
+  await page.locator("#lifeCanvas").click({ position: { x: 120, y: 120 } });
+  await expect(page.locator("#aliveValue")).not.toHaveText("0");
+  expect(errors).toEqual([]);
+});
+
 test("默认快速生成深层门链，也可开启验证并取消", async ({ page }) => {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));

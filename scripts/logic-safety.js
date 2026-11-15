@@ -61,7 +61,7 @@
         ? { zone, phases }
         : { zone, current: new Set(group.referenceCells.map(key)) };
     });
-    const probes = [...candidate.connections.map((connection) => ({
+    const probes = [...[...candidate.connections, ...(candidate.inputConnections || [])].map((connection) => ({
       ...connection, generation: connection.alignGeneration,
     })), outputProbe].map((probe) => ({ ...probe, keys: probe.cells.map(key) }));
 

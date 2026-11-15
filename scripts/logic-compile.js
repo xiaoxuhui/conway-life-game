@@ -42,10 +42,15 @@
       signalDelta: transform(circuit.signalDelta),
       terminalCells: map(circuit.terminalCells),
       ...(circuit.gateAnchors ? { gateAnchors: map(circuit.gateAnchors) } : {}),
+      ...(circuit.variablePorts ? {
+        variablePorts: circuit.variablePorts.map((port) => ({ ...port, cells: map(port.cells) })),
+      } : {}),
+      ...mapInputMetadata(circuit, map),
       gunGroups: (circuit.gunGroups || []).map((group) => ({
         ...group,
         zoneCells: map(group.zoneCells),
         referenceCells: map(group.referenceCells),
+        ...(group.incident ? { incident: { ...group.incident, cells: map(group.incident.cells) } } : {}),
       })),
       connections: (circuit.connections || []).map((connection) => ({
         ...connection,
@@ -65,6 +70,15 @@
       cells = LifeEngine.nextCellSet(cells);
     }
     return [...cells].map((key) => key.split(",").map(Number));
+  }
+
+  function mapInputMetadata(circuit, map) {
+    if (!circuit.inputSources?.length) return {};
+    const move = (item) => ({ ...item, cells: map(item.cells) });
+    return {
+      inputSources: circuit.inputSources.map(move),
+      inputConnections: circuit.inputConnections.map(move),
+    };
   }
 
   function uniqueCoordinates(coordinates) {
@@ -120,10 +134,19 @@
       cells: advanceCells(circuit.cells, generations),
       signalCells: advanceCells(circuit.signalCells, generations),
       terminalCells: advanceCells(circuit.terminalCells, generations),
+      ...(circuit.variablePorts ? {
+        variablePorts: circuit.variablePorts.map((port) => ({
+          ...port, cells: advanceCells(port.cells, generations),
+        })),
+      } : {}),
+      ...mapInputMetadata(circuit, (cells) => advanceCells(cells, generations)),
       gunGroups: circuit.gunGroups.map((group) => ({
         ...group,
         zoneCells: group.zoneCells,
         referenceCells: advanceCells(group.referenceCells, generations),
+        ...(group.incident ? {
+          incident: { ...group.incident, cells: gliderTrack(group.incident.cells).at(generations).cells },
+        } : {}),
       })),
       connections: circuit.connections.map((connection) => ({
         ...connection,
@@ -336,12 +359,23 @@
       referenceCells: cells.map((coordinate) => [...coordinate]),
     }));
     const nested = [];
+    const variablePorts = [];
+    const inputSources = [];
+    const inputConnections = [];
     const gateAnchors = [[0, 0]];
     const nestedCount = node.children.filter((child) => child.gate).length;
 
     node.children.forEach((child, portIndex) => {
       const origin = kit.inputOrigins[portIndex];
       if (!child.gate) {
+        if (child.variable && options.externalVariables?.has(child.variable)) {
+          variablePorts.push({
+            name: child.variable, value: child.value,
+            cells: shiftCoordinates(kit.inputSignalCells, ...origin),
+            generation: kit.inputSignalGeneration, gate: node.gate, portIndex, gatePath: path,
+          });
+          return;
+        }
         const source = child.value ? kit.inputTrueCells : kit.inputFalseCells;
         cells.push(...shiftCoordinates(source, origin[0], origin[1]));
         gunGroups.push({
@@ -431,6 +465,9 @@
           gunGroups.push(...shiftedChild.gunGroups);
         }
         gateAnchors.push(...shiftedChild.gateAnchors);
+        variablePorts.push(...(shiftedChild.variablePorts || []));
+        inputSources.push(...(shiftedChild.inputSources || []));
+        inputConnections.push(...(shiftedChild.inputConnections || []));
         connections.push(...shiftedChild.connections);
         connections.push({
           from: item.child.gate,
@@ -453,7 +490,7 @@
 
     const unique = new Map();
     for (const [row, column] of cells) unique.set(`${row},${column}`, [row, column]);
-    return {
+    const circuit = {
       gate: node.gate,
       expected: node.value,
       cells: [...unique.values()],
@@ -465,7 +502,10 @@
       gateAnchors,
       connections,
       gunGroups,
+      ...(options.externalVariables ? { variablePorts } : {}),
+      ...(inputSources.length ? { inputSources, inputConnections, verifySignals: true } : {}),
     };
+    return options.attachLocalInputs?.(circuit, path) || circuit;
   }
 
   const AXIAL_PAIR_ROUTES = Object.freeze({
@@ -505,10 +545,19 @@
       signalCells: shiftCoordinates(circuit.signalCells, rowOffset, columnOffset),
       terminalCells: shiftCoordinates(circuit.terminalCells, rowOffset, columnOffset),
       gateAnchors: shiftCoordinates(circuit.gateAnchors || [[0, 0]], rowOffset, columnOffset),
+      ...(circuit.variablePorts ? {
+        variablePorts: circuit.variablePorts.map((port) => ({
+          ...port, cells: shiftCoordinates(port.cells, rowOffset, columnOffset),
+        })),
+      } : {}),
+      ...mapInputMetadata(circuit, (coordinates) => shiftCoordinates(coordinates, rowOffset, columnOffset)),
       gunGroups: circuit.gunGroups.map((group) => ({
         ...group,
         zoneCells: shiftCoordinates(group.zoneCells, rowOffset, columnOffset),
         referenceCells: shiftCoordinates(group.referenceCells, rowOffset, columnOffset),
+        ...(group.incident ? {
+          incident: { ...group.incident, cells: shiftCoordinates(group.incident.cells, rowOffset, columnOffset) },
+        } : {}),
       })),
       connections: circuit.connections.map((connection) => ({
         ...connection,
@@ -1017,6 +1066,14 @@
       signalCells: shift(circuit.signalCells),
       terminalCells: shift(circuit.terminalCells),
       gateAnchors: shift(circuit.gateAnchors || []),
+      ...(circuit.inputSources ? {
+        inputSources: circuit.inputSources.map((source) => Object.freeze({
+          ...source, cells: Object.freeze(shift(source.cells).map(Object.freeze)),
+        })),
+        inputConnections: circuit.inputConnections.map((port) => Object.freeze({
+          ...port, cells: Object.freeze(shift(port.cells).map(Object.freeze)),
+        })),
+      } : {}),
       connections: circuit.connections.map((connection) => Object.freeze({
         ...connection,
         cells: Object.freeze(shift(connection.cells).map(Object.freeze)),
@@ -1048,6 +1105,8 @@
     collectAxialChain, collectNestedEdges, compileAxialChainCandidate, compileAxialPair,
     compileAxialPairCandidates, compileCircuit, normalizeCircuit,
     orientSouthEast, phaseShiftCircuit, transformCircuit,
+    advanceCells, alignCoordinates, canonicalShape, gliderTrack, shiftCoordinates,
+    coordinateTransforms: COORDINATE_TRANSFORMS,
     transformNames: Object.freeze(Object.keys(COORDINATE_TRANSFORMS)),
   });
 });
