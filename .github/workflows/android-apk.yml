@@ -116,7 +116,7 @@ jobs:
 
   release:
     name: 发布 APK 到 Release
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ false }} # 独立 App 发布暂停，改由游戏大厅发行资源
     needs: build
     runs-on: ubuntu-latest
     permissions:
