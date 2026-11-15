@@ -62,6 +62,7 @@
     logicCodeForm: document.querySelector("#logicCodeForm"),
     logicCodeInput: document.querySelector("#logicCodeInput"),
     verifyLogicSafety: document.querySelector("#verifyLogicSafety"),
+    shareLogicInputs: document.querySelector("#shareLogicInputs"),
     logicFunctionSelect: document.querySelector("#logicFunctionSelect"),
     logicFunctionInputs: document.querySelector("#logicFunctionInputs"),
     loadLogicFunction: document.querySelector("#loadLogicFunctionButton"),
@@ -683,6 +684,7 @@
     elements.logicCodeForm.setAttribute("aria-busy", String(running));
     elements.logicCodeButton.textContent = running ? "取消生成" : "生成结构";
     elements.verifyLogicSafety.disabled = running;
+    elements.shareLogicInputs.disabled = running;
     elements.logicCodeButton.disabled = !running && state.world.rule !== Life.DEFAULT_RULE;
   }
 
@@ -738,6 +740,13 @@
 
   function logicGenerationProgress(controller, progress) {
     if (state.dialogs.logicGenerationController !== controller || controller.signal.aborted) return;
+    if (progress.layoutMode === "shared-inputs") {
+      const message = progress.phase === "safety"
+        ? `正在验证共享线路（第 ${formatNumber(progress.generation)} / ${formatNumber(progress.horizon)} 代）…`
+        : "正在布置共享输入枪…";
+      setLogicCodeFeedback(message, "progress");
+      return;
+    }
     if (progress.layoutMode === "axial-chain") {
       const route = progress.routeStage === "reflected" ? "反射路线" : "直连路线";
       const gates = `${formatNumber(progress.gateCount)} 个门`;
@@ -807,6 +816,7 @@
         {
           signal: controller.signal,
           verifySafety: elements.verifyLogicSafety.checked,
+          shareInputs: elements.shareLogicInputs.checked,
           onProgress: (progress) => logicGenerationProgress(controller, progress),
         },
       );
@@ -817,14 +827,19 @@
       elements.presetSelect.value = `builtin:${command.presetId}`;
       Dialog.updatePresetDescription();
       state.dialogs.placement = placementAtCameraCenter(pattern);
-      const connected = Boolean(pattern.connectionCount);
+      const connected = Boolean(pattern.connectionCount || pattern.inputConnections?.length);
       const chainSummary = pattern.routing?.mode === "axial-chain"
         ? `${pattern.gateAnchors.length} 个独立门体同排放置，`
         : "";
-      const connectionSummary = connected ? `${pattern.connectionCount} 条滑翔机线路，` : "";
+      const sharedSummary = pattern.inputSources?.length
+        ? `${Object.keys(command.variables).length} 座变量输入枪。${pattern.inputSources.map(
+          ({ name, portCount }) => `${name} 的输入枪连接 ${portCount} 个端口`,
+        ).join("，")}。`
+        : "";
+      const connectionSummary = pattern.connectionCount ? `${pattern.connectionCount} 条滑翔机线路，` : "";
       const verificationNote = connected && !pattern.gunSafety ? "线路未经安全验证，" : "";
       setLogicCodeFeedback(
-        `${command.expression} → 预期 O=${command.expected}。${chainSummary}${connectionSummary}${verificationNote}放置后运行至第 ${pattern.logic.observeGeneration} 代读取最终输出。`,
+        `${command.expression} → 预期 O=${command.expected}。${sharedSummary}${chainSummary}${connectionSummary}${verificationNote}放置后运行至第 ${pattern.logic.observeGeneration} 代读取最终输出。`,
         "success",
       );
       render();

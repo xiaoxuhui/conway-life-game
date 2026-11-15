@@ -1,12 +1,12 @@
 (function exposeLogicCode(root, factory) {
   const dependencies = typeof module === "object" && module.exports
-    ? [require("./logic-parse.js"), require("./logic-expand.js"), require("./logic-compile.js"), require("./logic-safety.js")]
-    : [root.LogicParse, root.LogicExpand, root.LogicCompile, root.LogicSafety];
+    ? [require("./logic-parse.js"), require("./logic-expand.js"), require("./logic-compile.js"), require("./logic-safety.js"), require("./logic-inputs.js")]
+    : [root.LogicParse, root.LogicExpand, root.LogicCompile, root.LogicSafety, root.LogicInputs];
   const api = factory(...dependencies);
   if (typeof module === "object" && module.exports) module.exports = api;
   root.LogicCode = api;
 })(typeof globalThis !== "undefined" ? globalThis : this, function createLogicCode(
-  LogicParse, LogicExpand, LogicCompile, LogicSafety,
+  LogicParse, LogicExpand, LogicCompile, LogicSafety, LogicInputs,
 ) {
   "use strict";
 
@@ -31,6 +31,10 @@
       ...(safety ? { gunSafety: Object.freeze({ verifiedThrough: safety.horizon }) } : {}),
       routing: Object.freeze({ ...routing }),
       connections: Object.freeze(normalized.connections),
+      ...(normalized.inputSources?.length ? {
+        inputSources: Object.freeze(normalized.inputSources),
+        inputConnections: Object.freeze(normalized.inputConnections),
+      } : {}),
       logic: Object.freeze({
         gate: circuit.gate,
         inputs: Object.freeze([...command.inputs]),
@@ -235,6 +239,37 @@
     return assembledPattern(command, circuit, normalized, safety, routing);
   }
 
+  async function composeWithSharedInputs(command, names, resolveGateKit, reflectorKit, options) {
+    if (typeof resolveGateKit !== "function" || !reflectorKit) {
+      throw new LogicCodeError("当前环境缺少共享输入的门体或反射器");
+    }
+    const yieldControl = options.yieldControl || defaultYieldControl;
+    const attempts = [
+      { layout: 0, padding: 240, spacing: 20, variant: 0 },
+      { layout: 1, padding: 360, spacing: 20, variant: 3 },
+      { layout: 0, padding: 480, spacing: 40, variant: 2 },
+    ];
+    for (const attempt of attempts) {
+      const routing = { mode: "shared-inputs", ...attempt };
+      options.onProgress?.({ phase: "routing", layoutMode: routing.mode });
+      await yieldControl();
+      abortIfRequested(options.signal);
+      const candidate = LogicInputs.compileSharedCandidate(
+        command.tree, names, resolveGateKit, reflectorKit, attempt,
+      );
+      if (!candidate) continue;
+      const circuit = orientSouthEast(candidate);
+      const normalized = normalizeCircuit(circuit);
+      if (options.verifySafety === false) return assembledPattern(command, circuit, normalized, null, routing);
+      const safety = await validateGunSafetyAsync(normalized, {
+        ...options,
+        onProgress: (step) => options.onProgress?.({ ...step, phase: "safety", layoutMode: routing.mode }),
+      });
+      if (safety.safe) return assembledPattern(command, circuit, normalized, safety, routing);
+    }
+    throw new LogicCodeError(`未找到 ${[...names].join("、")} 的共享输入线路。可取消勾选「同名变量共用一座输入枪」使用原布局。`);
+  }
+
   async function composePatternAsync(
     command, resolvePreset, resolveGateKit, resolveReflectorKitOrOptions, maybeOptions = {},
   ) {
@@ -246,6 +281,12 @@
       : (resolveReflectorKitOrOptions || {});
     const verifySafety = options.verifySafety !== false;
     abortIfRequested(options.signal);
+    if (options.shareInputs && command.variables) {
+      const repeated = LogicInputs.repeatedVariables(command.tree);
+      if (repeated.size) return composeWithSharedInputs(
+        command, repeated, resolveGateKit, resolveReflectorKit?.("P5_90"), options,
+      );
+    }
     if (!command.steps || command.steps.length <= 1) return resolvePreset(command.presetId);
     if (!command.tree || typeof resolveGateKit !== "function") {
       throw new LogicCodeError("当前环境缺少真实级联门体");
