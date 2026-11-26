@@ -355,6 +355,53 @@
     }),
   });
 
+  // Life Lexicon p60 gun and Dieter Leithner's complete duplicator.
+  // https://conwaylife.com/ref/lexicon/lex_p.htm#p60gun
+  // https://conwaylife.com/wiki/Glider_duplicator
+  const P60_GUN_CELLS = rleCells("27bo$27b4o$11bo16b4o$10bobo5b2o8bo2bo5b2o$3b2o3b2o3bo14b4o5b2o$3b2o3b2o3bo4bobob2o3b4o$8b2o3bo5b2o3bo2bo$10bobo10bo$11bo8bo2bo2$26bobo$28bo$24bo$26bo$25bo2$11b2o$11b2o4bo$2o6b2o6b5ob2o$2o5b3o5bo2b2o4bo$8b2o5b2o8bo12bo$11b2o4bo7bo10bobo$11b2o12bo11b2o$24bo8b2o$22b2o9bobo$35bo$35b2o!");
+  const DUPLICATOR_CELLS = rleCells("44b2o4b$44b2o4b9$41b2obob2o2b2$41bo5bo2b2$42b2ob2o3b$44bo5b3$38b2o6bo3b$37bobo5bobo2b$12bo26bo4bo3bob$13bo30b5ob$11b3o29b2o3b2o$44b5ob$45b3o2b$46bo3b$24b2o4b3o17b$24b2o6bo17b$31bo18b5$23b2o25b$22bobo21b2o2b$24bo21b2o2b$13bo36b$12b4o34b$11b2obobo6bobo24b$2o8b3obo2bo3bo3bo24b$2o9b2obobo4bo28b$12b4o4bo4bo24b$13bo7bo28b$21bo3bo6b2o16b$23bobo6bobo15b$34bo15b$34b2o!");
+  const DUPLICATOR_INPUT = [[20, 12], [21, 13], [22, 11], [22, 12], [22, 13]];
+
+  const SIGNAL_COMPONENTS = [
+    definePreset({
+      id: "classic-glider-reflector",
+      name: "逻辑组件 · 经典 90°滑翔机反射器",
+      description: "输入从左上入射，输出向左下；附测试滑翔机，可设置测试输入周期",
+      width: 45, height: 43,
+      cells: [...REFLECTOR_90_BASE_CELLS, ...REFLECTOR_90_INPUT_CELLS],
+      component: {
+        kind: "reflector", input: REFLECTOR_90_INPUT_CELLS,
+        delta: [1, 1], period: 60,
+      },
+    }),
+    definePreset({
+      id: "glider-gun-p60",
+      name: "逻辑组件 · 60 周期滑翔机枪",
+      description: "真实 p60 枪体，每 60 代发射一枚滑翔机",
+      width: 39, height: 27, cells: P60_GUN_CELLS,
+      component: { kind: "gun", period: 60 },
+    }),
+    definePreset({
+      id: "glider-eater",
+      name: "逻辑组件 · 滑翔机吞噬器",
+      description: "鱼钩吞噬器；吸收输入并恢复原形，附测试滑翔机",
+      width: 14, height: 14,
+      cells: [...rleCells("2o$obo$2bo$2b2o!").map(([r, c]) => [r + 10, c + 10]),
+        [0, 1], [1, 2], [2, 0], [2, 1], [2, 2]],
+      component: {
+        kind: "eater", input: [[0, 1], [1, 2], [2, 0], [2, 1], [2, 2]],
+        delta: [1, 1], period: 60,
+      },
+    }),
+    definePreset({
+      id: "glider-duplicator-p60",
+      name: "逻辑组件 · 60 周期滑翔机复制器",
+      description: "Leithner 复制器，以 60 代间隔输入，一路信号转换为两路",
+      width: 50, height: 47, cells: DUPLICATOR_CELLS,
+      component: { kind: "duplicator", input: DUPLICATOR_INPUT, delta: [1, 1], period: 60 },
+    }),
+  ];
+
   const presets = Object.freeze([
     definePreset({
       id: "glider",
@@ -492,6 +539,7 @@
         [8, 12], [8, 13],
       ],
     }),
+    ...SIGNAL_COMPONENTS,
     logicPreset({
       id: "logic-not-0",
       name: "逻辑 · 非门（0→1）",
