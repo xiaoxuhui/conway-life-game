@@ -177,6 +177,42 @@ body.is-running .status-dot {
   min-width: 0;
 }
 
+.glider-tools-controls {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(160px, 0.7fr) minmax(200px, 1fr) minmax(240px, 1.5fr);
+  gap: 8px 12px;
+  align-items: end;
+}
+
+.glider-tools-controls .field-note {
+  grid-column: 1 / -1;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.glider-synthesis-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+#componentPeriodInput {
+  width: 100%;
+  min-height: 48px;
+  padding: 0 12px;
+  border: 1px solid var(--line-bright);
+  border-radius: 10px;
+  color: var(--text);
+  background: var(--surface-raised);
+}
+
+@media (max-width: 700px) {
+  .glider-tools-controls {
+    grid-template-columns: 1fr;
+  }
+}
+
 .primary-controls,
 .view-controls,
 .file-controls,

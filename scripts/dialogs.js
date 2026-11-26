@@ -10,7 +10,7 @@
   // app 层辅助函数（showToast/render/stop/closeDialog/replacePlacementPattern/
   // setLogicCodeFeedback/formatNumber），从而避免与 app.js 主控制器深度耦合。
   function create(context) {
-    const { state, elements, Life, PatternStore, FunctionStore, RecordImport, FileBackup, LogicCode, Presets } = context;
+    const { state, elements, Life, PatternStore, FunctionStore, RecordImport, FileBackup, LogicCode, Presets, GliderTools } = context;
     const {
       showToast, render, stop, closeDialog, replacePlacementPattern, setLogicCodeFeedback, formatNumber,
     } = context.helpers;
@@ -290,9 +290,14 @@
     }
 
     function updatePresetDescription() {
-      const { source, pattern } = selectedPattern();
+      let { source, pattern } = selectedPattern();
       if (!pattern) {
         elements.presetDescription.textContent = "";
+        return;
+      }
+      try { pattern = GliderTools.componentPattern(pattern, elements.componentPeriod.value); }
+      catch (error) {
+        elements.presetDescription.textContent = error.message;
         return;
       }
       const details = `${pattern.width} × ${pattern.height} · ${formatNumber(pattern.cells.length)} 个活细胞`;

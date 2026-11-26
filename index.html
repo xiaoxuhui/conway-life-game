@@ -13,6 +13,7 @@
   <script defer src="scripts/life-stack-renderer.js?v=0.17.0"></script>
   <script defer src="scripts/life-stack.js?v=0.17.0"></script>
   <script defer src="scripts/presets.js?v=0.17.0"></script>
+  <script defer src="scripts/glider-tools.js?v=0.17.0"></script>
   <script defer src="scripts/pattern-library.js?v=0.17.0"></script>
   <script defer src="scripts/golly-import.js?v=0.17.0"></script>
   <script defer src="scripts/speed-control.js?v=0.17.0"></script>
@@ -137,6 +138,28 @@
           <button class="button" id="importButton" type="button">导入</button>
           <input id="importInput" type="file" accept="application/json,.json" hidden>
           <button class="button" id="exportButton" type="button" disabled>导出</button>
+        </div>
+
+        <div class="control-group glider-tools-controls">
+          <label>
+            <span class="select-label">滑翔机输入周期（代）</span>
+            <input id="componentPeriodInput" type="number" min="60" step="60" value="60"
+              aria-describedby="componentPeriodHelp">
+          </label>
+          <label>
+            <span class="select-label">滑翔机合成对象</span>
+            <select id="gliderSynthesisSource">
+              <option value="selected">图案库所选图案</option>
+              <option value="world">当前棋盘</option>
+            </select>
+          </label>
+          <div class="glider-synthesis-buttons">
+            <button class="button" id="synthesizeGlidersButton" type="button">分解成滑翔机</button>
+            <button class="button" id="synthesizeGunsButton" type="button">滑翔机＋配套枪</button>
+          </div>
+          <p id="componentPeriodHelp" class="field-note">反射器、吞噬器和复制器附 3 枚测试滑翔机，间隔支持 60 的倍数。p60 枪固定每 60 代发射。</p>
+          <p class="field-note">成功后替换棋盘，可撤销。支持方块、闪烁器、蜂巢、面包、小船和单枚滑翔机。</p>
+          <p class="field-note" id="gliderSynthesisStatus" role="status" aria-live="polite"></p>
         </div>
 
         <form class="control-group rule-controls" id="ruleForm" novalidate>

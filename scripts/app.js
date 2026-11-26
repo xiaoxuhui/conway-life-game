@@ -6,6 +6,7 @@
   const LifeStack = window.LifeStack;
   const RendererModule = window.LifeRenderer;
   const Presets = window.LifePresets;
+  const GliderTools = window.GliderTools;
   const PatternStore = window.PatternLibrary;
   const SpeedControl = window.SpeedControl;
   const LogicCode = window.LogicCode;
@@ -57,6 +58,7 @@
     importGollyButton: document.querySelector("#importGollyButton"),
     importGollyInput: document.querySelector("#importGollyInput"),
     loadPreset: document.querySelector("#loadPresetButton"),
+    componentPeriod: document.querySelector("#componentPeriodInput"),
     logicCodeButton: document.querySelector("#logicCodeButton"),
     logicCodeFeedback: document.querySelector("#logicCodeFeedback"),
     logicCodeForm: document.querySelector("#logicCodeForm"),
@@ -223,6 +225,7 @@
     FileBackup: window.LifeFileBackup,
     LogicCode,
     Presets,
+    GliderTools,
     helpers: {
       showToast,
       render,
@@ -624,7 +627,7 @@
     }
     hideToast();
     render();
-    showToast("已恢复清空前的世界");
+    showToast(snapshot.undoMessage || "已恢复清空前的世界");
   }
 
   function fillRandom() {
@@ -666,12 +669,68 @@
   }
 
   function startPlacement() {
-    const { pattern } = Dialog.selectedPattern();
+    let { pattern } = Dialog.selectedPattern();
     if (!pattern) return;
+    try { pattern = GliderTools.componentPattern(pattern, elements.componentPeriod.value); }
+    catch (error) { showToast(error.message); return; }
     stop();
     state.dialogs.placement = placementAtCameraCenter(pattern);
     render();
     showToast(`正在放置：${pattern.name}。可拖动后松开放置多个。`, { duration: 5000 });
+  }
+
+  let gliderConversion = 0;
+  async function convertToGliders(guns) {
+    const buttons = [document.querySelector("#synthesizeGlidersButton"), document.querySelector("#synthesizeGunsButton")];
+    const feedback = document.querySelector("#gliderSynthesisStatus");
+    const current = document.querySelector("#gliderSynthesisSource").value === "world";
+    const population = Tiles.describeWorld(state.world.cells)?.population ?? state.world.cells.cells.size;
+    if (state.world.rule !== Life.DEFAULT_RULE) {
+      feedback.textContent = "滑翔机合成适用于 B3/S23，请先应用康威规则。";
+      return;
+    }
+    if (state.world.pruneGliders) {
+      feedback.textContent = "请先关闭「清理离群滑翔机」，以保留合成所需的信号。";
+      return;
+    }
+    if (current && population > 7) {
+      feedback.textContent = "当前棋盘尚无对应合成配方。支持方块、闪烁器、蜂巢、面包、小船和单枚滑翔机。";
+      return;
+    }
+    const token = ++gliderConversion;
+    const original = state.world.cells;
+    const generation = state.world.generation;
+    const selected = Dialog.selectedPattern().pattern;
+    const cells = current ? Life.aliveCoordinates(original) : selected?.cells;
+    if (!cells) return;
+    const snapshot = {
+      world: Life.cloneWorld(original), generation,
+      camera: RendererModule.createCamera(state.world.camera),
+      logicOutputs: state.world.logicOutputs.map((output) => ({ ...output })),
+      wasRunning: false,
+      undoMessage: "已恢复转换前的棋盘",
+    };
+    stop();
+    buttons.forEach((button) => { button.disabled = true; });
+    feedback.textContent = "正在对齐滑翔机并验证碰撞…";
+    try {
+      const result = await GliderTools.synthesize(cells, { guns, period: elements.componentPeriod.value });
+      if (token !== gliderConversion || state.world.cells !== original || state.world.generation !== generation ||
+        state.world.rule !== Life.DEFAULT_RULE || state.world.pruneGliders ||
+        original.cells.size !== snapshot.world.cells.size ||
+        [...original.cells].some((key) => !snapshot.world.cells.has(key))) {
+        feedback.textContent = "棋盘已变化，请重新转换。";
+        return;
+      }
+      resetWith(Life.createWorld(result.cells));
+      state.world.undoSnapshot = snapshot;
+      feedback.textContent = result.description;
+      showToast("已生成滑翔机合成图案", { undo: true, duration: 7000 });
+    } catch (error) {
+      feedback.textContent = error.message;
+    } finally {
+      buttons.forEach((button) => { button.disabled = false; });
+    }
   }
 
   function setLogicCodeFeedback(message = "", stateName = "") {
@@ -1362,6 +1421,9 @@
   elements.random.addEventListener("click", fillRandom);
   elements.undo.addEventListener("click", undoClear);
   elements.presetSelect.addEventListener("change", Dialog.updatePresetDescription);
+  elements.componentPeriod.addEventListener("change", Dialog.updatePresetDescription);
+  document.querySelector("#synthesizeGlidersButton").addEventListener("click", () => { void convertToGliders(false); });
+  document.querySelector("#synthesizeGunsButton").addEventListener("click", () => { void convertToGliders(true); });
   elements.loadPreset.addEventListener("click", togglePlacement);
   elements.logicCodeForm.addEventListener("submit", generateLogicStructure);
   elements.logicCodeInput.addEventListener("input", () => {
